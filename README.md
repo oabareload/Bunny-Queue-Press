@@ -32,26 +32,76 @@ A lightweight editorial scheduling plugin for WordPress that allows creators and
 ## File structure
 
 ```text
-wp-queuepress/
+```text
+```text
+Bunny-Queue-Press/
+├── Bunny-Queue-Press.code-workspace
+├── LICENSE
+├── README.md
+├── wp-queuepress/
+│   ├── assets/
+│   │   ├── css/
+│   │   │   └── admin.css
+│   │   └── js/
+│   │       ├── calendar.js
+│   │       └── editor.js
+│   ├── includes/
+│   │   ├── Admin/
+│   │   │   ├── Admin_Menu.php
+│   │   │   ├── Calendar_Page.php
+│   │   │   ├── Settings_Page.php
+│   │   │   └── Slot_Ajax.php
+│   │   ├── Editor/
+│   │   │   └── Editor_Assets.php
+│   │   ├── Plugin.php
+│   │   ├── Rest/
+│   │   │   └── Queue_Controller.php
+│   │   ├── Schedule/
+│   │   │   ├── Post_Query.php
+│   │   │   ├── Queue_Assigner.php
+│   │   │   ├── Schedule_Calculator.php
+│   │   │   └── Slot_Repository.php
+│   │   └── Settings/
+│   │       └── Preferences.php
+│   ├── languages/
+│   │   ├── wp-queuepress-es_ES-wp-queuepress-editor.json
+│   │   ├── wp-queuepress-es_ES.mo
+│   │   ├── wp-queuepress-es_ES.po
+│   │   └── wp-queuepress.pot
+│   ├── uninstall.php
+│   └── wp-queuepress.php
+```
 ├── assets/
-│   └── css/
-│       └── admin.css
+│   ├── css/
+│   │   └── admin.css
+│   └── js/
+│       ├── calendar.js
+│       └── editor.js
 ├── includes/
 │   ├── Admin/
 │   │   ├── Admin_Menu.php
 │   │   ├── Calendar_Page.php
-│   │   └── Settings_Page.php
+│   │   ├── Settings_Page.php
+│   │   └── Slot_Ajax.php
+│   ├── Editor/
+│   │   └── Editor_Assets.php
+│   ├── Rest/
+│   │   └── Queue_Controller.php
 │   ├── Schedule/
 │   │   ├── Post_Query.php
+│   │   ├── Queue_Assigner.php
 │   │   ├── Schedule_Calculator.php
 │   │   └── Slot_Repository.php
+│   └── Settings/
+│       └── Preferences.php
 │   └── Plugin.php
 ├── languages/
-│   ├── wp-queuepress.pot
-│   └── wp-queuepress-es_ES.po
+│   ├── wp-queuepress-es_ES-wp-queuepress-editor.json
+│   ├── wp-queuepress-es_ES.mo
+│   ├── wp-queuepress-es_ES.po
+│   └── wp-queuepress.pot
 ├── uninstall.php
 └── wp-queuepress.php
-README.md
 ```
 
 ## Architecture decisions
