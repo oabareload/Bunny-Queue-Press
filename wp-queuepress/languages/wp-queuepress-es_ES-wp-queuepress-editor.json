@@ -1,0 +1,31 @@
+{
+  "translationRevisionDate": "2026-05-10 00:00+0000",
+  "generator": "WP QueuePress starter translation",
+  "domain": "messages",
+  "locale_data": {
+    "messages": {
+      "": {
+        "domain": "messages",
+        "lang": "es_ES"
+      },
+      "Fill Gaps: use earliest free slot": [
+        "Rellenar huecos: usar el primer espacio libre"
+      ],
+      "No free publishing slots are currently available.": [
+        "No hay espacios de publicación disponibles actualmente."
+      ],
+      "Post queued for publishing.": [
+        "Entrada puesta en cola para publicación."
+      ],
+      "Queue": [
+        "Cola"
+      ],
+      "Queue Last: append to end of queue": [
+        "Poner último en cola: añadir al final de la cola"
+      ],
+      "Queueing...": [
+        "Poniendo en cola..."
+      ]
+    }
+  }
+}
