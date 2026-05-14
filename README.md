@@ -49,9 +49,9 @@ wp-queuepress/
 ├── languages/
 │   ├── wp-queuepress.pot
 │   └── wp-queuepress-es_ES.po
-├── README.md
 ├── uninstall.php
 └── wp-queuepress.php
+README.md
 ```
 
 ## Architecture decisions
