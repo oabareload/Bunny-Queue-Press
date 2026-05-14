@@ -1,0 +1,31 @@
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# WordPress
+wp-queuepress/languages/*.mo
+wp-queuepress/languages/*.po
+wp-queuepress/languages/*.pot
+
+# Composer
+/vendor/
+/composer.lock
+
+# PHPStorm
+.phpstorm.meta.php
+
+# Env
+.env
+.env.*
