@@ -29,3 +29,6 @@ wp-queuepress/languages/*.pot
 # Env
 .env
 .env.*
+
+# VS Code Workspace
+Bunny-Queue-Press.code-workspace
