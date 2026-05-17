@@ -101,7 +101,7 @@ final class Calendar_Page {
 	$days            = $this->build_week_days($week_start);
 	?>
 	<div class="wrap qps-wrap" data-wp-queuepress-week="<?php echo esc_attr($week_start->format('Y-m-d')); ?>">
-	<h1><?php echo esc_html__('WP QueuePress Calendar', 'wp-queuepress'); ?></h1>
+	<h1><?php echo esc_html__('Bunny Queue Press Calendar', 'wp-queuepress'); ?></h1>
 	<p class="description">
 	<?php echo esc_html__('Review configured slots, scheduled posts, published posts, and open publishing times for the selected week.', 'wp-queuepress'); ?>
 	</p>

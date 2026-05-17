@@ -142,7 +142,7 @@ final class Settings_Page {
 		$settings = $this->preferences->get();
 		?>
 		<div class="wrap qps-wrap">
-			<h1><?php echo esc_html__('WP QueuePress Settings', 'wp-queuepress'); ?></h1>
+				<h1><?php echo esc_html__('Bunny Queue Press Settings', 'wp-queuepress'); ?></h1>
 
 			<?php if (isset($_GET['settings-updated'])) : ?>
 				<div class="notice notice-success is-dismissible"><p><?php echo esc_html__('Settings saved.', 'wp-queuepress'); ?></p></div>
@@ -157,7 +157,7 @@ final class Settings_Page {
 				<div class="qps-settings-grid">
 					<section class="qps-settings-panel">
 						<h2><?php echo esc_html__('Calendar Preferences', 'wp-queuepress'); ?></h2>
-						<p><?php echo esc_html__('Control how dates and times are displayed inside WP QueuePress.', 'wp-queuepress'); ?></p>
+					<p><?php echo esc_html__('Control how dates and times are displayed inside Bunny Queue Press.', 'wp-queuepress'); ?></p>
 
 						<label class="qps-field">
 							<span><?php echo esc_html__('Week Starts On', 'wp-queuepress'); ?></span>

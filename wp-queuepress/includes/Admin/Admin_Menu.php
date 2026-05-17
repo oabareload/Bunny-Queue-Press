@@ -59,8 +59,8 @@ final class Admin_Menu {
 	 */
 	public function add_pages(): void {
 		add_menu_page(
-			__('WP QueuePress', 'wp-queuepress'),
-			__('WP QueuePress', 'wp-queuepress'),
+			__('Bunny Queue Press', 'wp-queuepress'),
+			__('Bunny Queue Press', 'wp-queuepress'),
 			'manage_options',
 			'qps-calendar',
 			array($this->calendar_page, 'render'),
