@@ -11,6 +11,7 @@ namespace QueuePostScheduler;
 
 use QueuePostScheduler\Admin\Admin_Menu;
 use QueuePostScheduler\Admin\Calendar_Page;
+use QueuePostScheduler\Admin\Pipeline_Page;
 use QueuePostScheduler\Admin\Slot_Ajax;
 use QueuePostScheduler\Admin\Settings_Page;
 use QueuePostScheduler\Editor\Editor_Assets;
@@ -67,8 +68,9 @@ final class Plugin {
 		$queue_assigner      = new Queue_Assigner($post_query, $schedule_calculator, $preferences);
 
 		$settings_page = new Settings_Page($slot_repository, $preferences);
-		$calendar_page = new Calendar_Page($slot_repository, $post_query, $schedule_calculator, $preferences);
-		$admin_menu    = new Admin_Menu($settings_page, $calendar_page);
+		$calendar_page = new Calendar_Page($slot_repository, $schedule_calculator, $preferences);
+		$pipeline_page = new Pipeline_Page($post_query, $preferences);
+		$admin_menu    = new Admin_Menu($settings_page, $calendar_page, $pipeline_page);
 		$slot_ajax     = new Slot_Ajax($slot_repository, $post_query, $schedule_calculator, $preferences);
 		$editor_assets = new Editor_Assets();
 		$queue_api     = new Queue_Controller($queue_assigner);

@@ -1,5 +1,5 @@
 /**
- * Admin styles for WP QueuePress.
+ * Admin styles for Bunny Queue Press.
  */
 
 .qps-wrap .description {
@@ -124,6 +124,155 @@
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 	gap: 14px;
+}
+
+.qps-pipeline-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(250px, 1fr));
+	gap: 18px;
+}
+
+.qps-pipeline-column {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.qps-pipeline-column-header,
+.qps-pipeline-group-header {
+	padding: 16px 18px 12px;
+}
+
+.qps-pipeline-column-header h2,
+.qps-pipeline-group-header strong {
+	font-size: 15px;
+	margin: 0;
+}
+
+.qps-pipeline-column-header p,
+.qps-pipeline-group-header span {
+	color: #646970;
+	font-size: 13px;
+	margin-top: 6px;
+}
+
+.qps-pipeline-column-body {
+	padding: 0 18px 18px;
+}
+
+.qps-pipeline-group {
+	border-top: 1px solid #f0f0f1;
+	padding-top: 14px;
+}
+
+.qps-pipeline-group:first-child {
+	border-top: 0;
+}
+
+.qps-card-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.qps-card {
+	display: block;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	margin: 0 0 10px;
+	overflow: hidden;
+	height: 84px;
+	min-height: 84px;
+}
+
+.qps-card-link {
+	display: flex;
+	align-items: stretch;
+	gap: 12px;
+	width: 100%;
+	height: 100%;
+	text-decoration: none;
+	color: inherit;
+	cursor: pointer;
+}
+
+.qps-card-link:hover,
+.qps-card-link:focus-visible {
+	background: #eef2f2;
+}
+
+.qps-card-link:focus-visible {
+	outline: 2px solid #5b9dd9;
+	outline-offset: -2px;
+}
+
+.qps-card-image {
+	flex: 0 0 108px;
+	width: 108px;
+	height: 100%;
+	overflow: hidden;
+	border-radius: 0;
+}
+
+.qps-card-image img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.qps-card-body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding: 10px 14px;
+}
+
+.qps-card-title {
+	font-weight: 600;
+	line-height: 1.3;
+	margin-bottom: 6px;
+}
+
+.qps-card-title a,
+.qps-card-title span {
+	color: #172b4d;
+	text-decoration: none;
+}
+
+.qps-card-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	font-size: 12px;
+	color: #646970;
+}
+
+.qps-card-meta time {
+	font-weight: 600;
+}
+
+.qps-empty {
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 16px;
+	text-align: center;
+}
+
+.qps-empty span {
+	display: block;
+}
+
+.qps-card + .qps-card {
+	margin-top: 8px;
 }
 
 .qps-day-column {

@@ -1,6 +1,6 @@
 <?php
 /**
- * Uninstall cleanup for WP QueuePress.
+ * Uninstall cleanup for Bunny Queue Press.
  *
  * @package QueuePostScheduler
  */

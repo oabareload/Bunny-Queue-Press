@@ -13,7 +13,7 @@
 	var apiFetch = wp.apiFetch;
 
 	/**
-	 * AddToQueue toggle for Gutenberg editor — WP QueuePress 1.1.0.
+	 * AddToQueue toggle for Gutenberg editor — Bunny Queue Press 1.2.1.
 	 *
 	 * Model:
 	 *   - Finds the next free configured slot via REST GET /next-slot.

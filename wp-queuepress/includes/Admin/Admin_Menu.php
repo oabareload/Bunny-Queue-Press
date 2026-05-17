@@ -32,14 +32,23 @@ final class Admin_Menu {
 	private Calendar_Page $calendar_page;
 
 	/**
+	 * Pipeline page controller.
+	 *
+	 * @var Pipeline_Page
+	 */
+	private Pipeline_Page $pipeline_page;
+
+	/**
 	 * Builds the admin menu controller.
 	 *
-	 * @param Settings_Page $settings_page Settings page controller.
-	 * @param Calendar_Page $calendar_page Calendar page controller.
+	 * @param Settings_Page  $settings_page  Settings page controller.
+	 * @param Calendar_Page  $calendar_page  Calendar page controller.
+	 * @param Pipeline_Page  $pipeline_page  Pipeline page controller.
 	 */
-	public function __construct(Settings_Page $settings_page, Calendar_Page $calendar_page) {
-		$this->settings_page = $settings_page;
-		$this->calendar_page = $calendar_page;
+	public function __construct(Settings_Page $settings_page, Calendar_Page $calendar_page, Pipeline_Page $pipeline_page) {
+		$this->settings_page  = $settings_page;
+		$this->calendar_page  = $calendar_page;
+		$this->pipeline_page = $pipeline_page;
 	}
 
 	/**
@@ -62,23 +71,32 @@ final class Admin_Menu {
 			__('Bunny Queue Press', 'wp-queuepress'),
 			__('Bunny Queue Press', 'wp-queuepress'),
 			'manage_options',
-			'qps-calendar',
-			array($this->calendar_page, 'render'),
+			'qps-pipeline',
+			array($this->pipeline_page, 'render'),
 			'dashicons-calendar-alt',
 			58
 		);
 
 		add_submenu_page(
-			'qps-calendar',
-			__('Calendar', 'wp-queuepress'),
-			__('Calendar', 'wp-queuepress'),
+			'qps-pipeline',
+			__('Pipeline', 'wp-queuepress'),
+			__('Pipeline', 'wp-queuepress'),
+			'manage_options',
+			'qps-pipeline',
+			array($this->pipeline_page, 'render')
+		);
+
+		add_submenu_page(
+			'qps-pipeline',
+			__('Calendar Settings', 'wp-queuepress'),
+			__('Calendar Settings', 'wp-queuepress'),
 			'manage_options',
 			'qps-calendar',
 			array($this->calendar_page, 'render')
 		);
 
 		add_submenu_page(
-			'qps-calendar',
+			'qps-pipeline',
 			__('Settings', 'wp-queuepress'),
 			__('Settings', 'wp-queuepress'),
 			'manage_options',
@@ -94,7 +112,15 @@ final class Admin_Menu {
 	 * @return void
 	 */
 	public function enqueue_assets(string $hook_suffix): void {
-		if (! in_array($hook_suffix, array('toplevel_page_qps-calendar', 'qps-calendar_page_qps-settings'), true)) {
+		$current_page = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : '';
+		$allowed_hooks = array(
+			'toplevel_page_qps-pipeline',
+			'qps-pipeline_page_qps-pipeline',
+			'qps-pipeline_page_qps-calendar',
+			'qps-pipeline_page_qps-settings',
+		);
+
+		if (! in_array($hook_suffix, $allowed_hooks, true) && ! in_array($current_page, array('qps-pipeline', 'qps-calendar', 'qps-settings'), true)) {
 			return;
 		}
 
@@ -106,7 +132,7 @@ final class Admin_Menu {
 			WP_QUEUEPRESS_VERSION
 		);
 
-		if ('toplevel_page_qps-calendar' !== $hook_suffix) {
+		if ('qps-calendar' !== $current_page && 'qps-pipeline_page_qps-calendar' !== $hook_suffix) {
 			return;
 		}
 

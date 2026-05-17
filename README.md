@@ -1,6 +1,6 @@
 # Bunny Queue Press
 
-A lightweight editorial scheduling plugin for WordPress that allows creators and publishers to configure reusable weekly publishing slots, visualize scheduled and published content in a clean calendar interface, and identify free publishing spaces quickly.
+Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It provides a compact Pipeline overview, recurring weekly slot configuration in Calendar Settings, and an Add to Queue workflow that keeps Gutenberg autosave-safe while assigning future schedule dates.
 
 ## Plugin metadata
 
@@ -15,19 +15,53 @@ A lightweight editorial scheduling plugin for WordPress that allows creators and
 
 ## Requirements
 
-- WordPress 6.0 or newer.
-- PHP 7.4 or newer.
+- WordPress 6.0 or newer
+- PHP 7.4 or newer
 
-## MVP scope
+## Features
 
-- Admin menu with Calendar and Settings pages.
-- Weekly recurring publishing slot settings stored in a WordPress option.
-- Retrieval of scheduled posts with `future` status.
-- Retrieval of published posts with `publish` status.
-- Utility methods for occupied and free slot calculation.
-- Gutenberg editor action for queueing a post into the next free publishing slot.
-- Visual weekly slot management directly in the Calendar screen.
-- Native WordPress admin UI with a small dependency-free stylesheet.
+- Pipeline overview page for drafts, scheduled posts, and recently published content
+- Calendar Settings for weekly recurring slot configuration
+- Add to Queue workflow from the Gutenberg editor
+- Draft → Schedule workflow without manual publish date management
+- Autosave-safe scheduling behavior during queue assignment
+- Compact editorial pipeline cards with full-card click targets
+- Single-user focused workflow for small editorial teams or solo creators
+- Minimal native admin styling with no JavaScript framework dependency
+
+## Workflow
+
+1. Configure reusable weekly publishing slots in **Calendar Settings**.
+2. Draft content in Gutenberg.
+3. Use the **Add to Queue** toggle to assign the next available slot.
+4. Gutenberg updates the post date so the Publish button becomes Schedule.
+5. Autosave is temporarily paused while queue mode is active to keep date changes safe.
+6. Review drafts, scheduled posts, and published content in the **Pipeline** page.
+
+## Admin Pages
+
+- **Pipeline** — editorial overview of Drafts, Scheduled, and Published posts
+- **Calendar Settings** — recurring weekly slot configuration with weekdays only
+- **Settings** — plugin preferences and queue assignment controls
+
+## Changelog
+
+### 1.2.1
+
+- Added a dedicated Pipeline page for editorial workflow visibility
+- Separated Calendar Settings into weekly recurring slot configuration
+- Simplified Add to Queue queue assignment behavior
+- Improved autosave-safe queue flow in the editor
+- Redesigned compact editorial pipeline cards
+- Fixed admin UI asset routing and page styling
+
+## Installation
+
+1. Copy the `wp-queuepress` folder into `wp-content/plugins/`.
+2. Activate **Bunny Queue Press** from the WordPress Plugins screen.
+3. Open **Bunny Queue Press > Pipeline** to review editorial status.
+4. Open **Bunny Queue Press > Calendar Settings** to configure weekly recurring slots.
+5. Use the Gutenberg editor Add to Queue toggle to schedule drafts safely.
 
 ## File structure
 
@@ -70,37 +104,13 @@ Bunny-Queue-Press/
 │   └── wp-queuepress.php
 ```
 
-## Architecture decisions
-
-- The plugin uses WordPress hooks, options, Settings API, `WP_Query`, admin menus, and native escaping/sanitization helpers.
-- PHP namespaces isolate the plugin code without adding dependencies.
-- A small plugin-owned autoloader replaces Composer to keep installation simple.
-- Slot storage is centralized in `Slot_Repository`.
-- Post retrieval is centralized in `Post_Query`.
-- Slot availability logic is centralized in `Schedule_Calculator` so future queue automation can use the same rules as the admin UI.
-- The UI is intentionally server-rendered and uses no JavaScript framework.
-
-## Implementation steps
-
-1. Copy `wp-queuepress` into `wp-content/plugins/`.
-2. Activate **Bunny Queue Press** from the WordPress Plugins screen.
-3. Open **Bunny Queue Press > Calendar**.
-4. Use the global **Add Slot** panel to add publishing slots with the native time picker.
-5. Choose whether the slot applies only to that day, weekdays, weekends, or every day.
-6. Open **Bunny Queue Press > Settings** to choose display preferences, pause queue assignment, export configuration, or reset slots.
-7. Review configured slots, future posts, published posts, and free slot indicators.
-
 ## Localization
 
-- English strings remain the default fallback.
+- English is the default fallback language.
 - Translation files are prepared in `languages/`.
-- Spanish localization is started in `languages/wp-queuepress-es_ES.po`.
-- All user-facing plugin strings use the `wp-queuepress` text domain.
+- All user-facing strings use the `wp-queuepress` text domain.
 
-## Future extensibility notes
+## Notes
 
-- Add a queue item post type or custom table only when queue automation requires it.
-- Reuse `Schedule_Calculator::get_free_slots()` for automatic assignment.
-- Add nonce-protected form actions for manual queue operations.
-- Keep drag-and-drop, AJAX, analytics, and notifications separate from the core scheduling services.
-- Consider filters for post types, slot matching tolerance, and user capabilities after the MVP behavior is stable.
+- This release focuses on visible admin workflow and UI stabilization.
+- Internal prefixes, namespaces, text domains, and database keys remain unchanged.
