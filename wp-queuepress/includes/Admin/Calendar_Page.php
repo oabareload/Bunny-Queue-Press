@@ -94,14 +94,19 @@ final class Calendar_Page {
 
 		<?php $this->render_global_slot_controls(); ?>
 
+		<div class="qps-save-controls">
+			<button class="button button-primary qps-save-weekly-slots" disabled><?php echo esc_html__('Save Changes', 'wp-queuepress'); ?></button>
+			<div class="qps-save-status" aria-live="polite"></div>
+		</div>
+
+		<div class="qps-rebuild-notice" hidden></div>
+
 		<div class="qps-calendar-grid">
 			<?php foreach ($days as $day) : ?>
 			<?php
 			$day_key = strtolower($day->format('l'));
 
-			if (! in_array($day_key, array('monday', 'tuesday', 'wednesday', 'thursday', 'friday'), true)) {
-				continue;
-			}
+			// Render all seven days (monday...sunday).
 
 			$day_date  = $day->format('Y-m-d');
 			$day_slots = $availability[$day_date] ?? array();
@@ -277,15 +282,9 @@ final class Calendar_Page {
 
 		foreach ($slots as $slot) {
 			$time         = (string) $slot['time'];
-			$status_class = ! empty($slot['occupied']) ? 'is-occupied' : 'is-free';
-			$status_text  = ! empty($slot['occupied'])
-				? __('Scheduled', 'wp-queuepress')
-				: __('Empty Slot', 'wp-queuepress');
-
-			echo '<li class="qps-slot ' . esc_attr($status_class) . '" data-time="' . esc_attr($time) . '">';
+			echo '<li class="qps-slot is-free" data-time="' . esc_attr($time) . '">';
 			echo '<div class="qps-slot-main">';
 			echo '<time>' . esc_html($time) . '</time>';
-			echo '<span class="qps-badge ' . esc_attr(! empty($slot['occupied']) ? 'is-scheduled' : 'is-empty') . '">' . esc_html($status_text) . '</span>';
 			echo '</div>';
 			echo '<button type="button" class="button-link-delete qps-slot-delete" data-day="' . esc_attr($day_key) . '" data-time="' . esc_attr($time) . '">';
 			echo esc_html__('Delete', 'wp-queuepress');
@@ -319,7 +318,6 @@ final class Calendar_Page {
 	private static function render_empty_state_html(string $message, string $badge): void {
 		echo '<div class="qps-empty">';
 		echo '<span>' . esc_html($message) . '</span>';
-		echo '<span class="qps-badge is-empty">' . esc_html($badge) . '</span>';
 		echo '</div>';
 	}
 

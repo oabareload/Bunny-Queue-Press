@@ -148,12 +148,14 @@ final class Admin_Menu {
 			'wp-queuepress-calendar',
 			'wpQueuePressSlots',
 			array(
-				'ajaxUrl'  => admin_url('admin-ajax.php'),
-				'nonce'    => wp_create_nonce('wp_queuepress_slots'),
-				'messages' => array(
+				'ajaxUrl'     => admin_url('admin-ajax.php'),
+				'nonce'       => wp_create_nonce('wp_queuepress_slots'),
+				'pipelineUrl' => admin_url('admin.php?page=qps-pipeline'),
+				'messages'    => array(
 					'invalidTime' => __('Invalid time.', 'wp-queuepress'),
 					'saving'      => __('Saving...', 'wp-queuepress'),
 					'deleteText'  => __('Delete', 'wp-queuepress'),
+					'emptyText'   => __('No configured slots.', 'wp-queuepress'),
 				),
 			)
 		);

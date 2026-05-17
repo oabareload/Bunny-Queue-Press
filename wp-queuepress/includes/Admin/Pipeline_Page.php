@@ -80,7 +80,30 @@ final class Pipeline_Page {
 			$now
 		);
 		$scheduled_posts = $this->post_query->get_posts_between('future', $now, $future_window);
-		$published_posts = $this->post_query->get_posts_between('publish', $published_from, $now);
+		// Fetch published posts with newest first (post_date DESC) for the Published column.
+		$published_query = new \WP_Query(
+			array(
+				'post_type'              => 'post',
+				'post_status'            => 'publish',
+				'posts_per_page'         => 100,
+				'orderby'                => 'date',
+				'order'                  => 'DESC',
+				'ignore_sticky_posts'    => true,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+				'date_query'             => array(
+					array(
+						'after'     => $published_from->format('Y-m-d H:i:s'),
+						'before'    => $now->format('Y-m-d H:i:s'),
+						'inclusive' => true,
+						'column'    => 'post_date',
+					),
+				),
+			)
+		);
+
+		$published_posts = $published_query->posts;
 		$draft_groups    = $this->group_posts_by_day($future_drafts, $timezone);
 		$scheduled_groups = $this->group_posts_by_day($scheduled_posts, $timezone);
 		$published_groups = $this->group_posts_by_day($published_posts, $timezone);

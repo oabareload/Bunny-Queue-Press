@@ -55,6 +55,14 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 - Redesigned compact editorial pipeline cards
 - Fixed admin UI asset routing and page styling
 
+### 1.2.2
+
+- Added deterministic Rebuild Preview: compute-only planner persists a proposed plan to `qps_pending_rebuild` and returns a human-friendly preview in the admin UI.
+- Added Apply Rebuild execution (single-request): an admin action that reads the persisted plan and applies scheduled date updates sequentially using the precomputed dates. The operation is synchronous (single AJAX request), continues on individual failures, collects conflicts, and deletes the pending plan after the attempt.
+- Improved Apply Rebuild UX: kept the preview modal open during apply, added a professional spinner and progress bar, in-modal result summary with conflict list, and retry/close actions. No background workers or batching were introduced in this release.
+- Calendar Settings: removed editorial badges such as "Empty Slot" and "Programmed" — the calendar is now strictly a configuration view showing weekly recurring slots only.
+- Fixed several client-state issues: transactional staged editor for Calendar Settings, robust save behavior, and correct published-post ordering in the Pipeline.
+
 ## Installation
 
 1. Copy the `wp-queuepress` folder into `wp-content/plugins/`.
@@ -114,3 +122,9 @@ Bunny-Queue-Press/
 
 - This release focuses on visible admin workflow and UI stabilization.
 - Internal prefixes, namespaces, text domains, and database keys remain unchanged.
+
+Important implementation notes:
+
+- The Apply Rebuild execution implemented in this release is intentionally simple and synchronous. It performs all changes in a single request using the persisted plan in `qps_pending_rebuild` and does NOT implement batching, background workers, resume logic, or retry queues. For large plans this may result in long-running requests or timeouts; plan for a future enhancement that introduces batching and background processing.
+- The frontend shows a simulated progress bar while the single request runs to provide better UX; this progress is visual only and does not reflect server-side per-item progress.
+- On conflicts or partial failures the server returns a list of conflicts which are displayed in the modal; the pending plan is removed after the attempt. If you prefer preserving the pending plan on partial failure, that can be changed in a follow-up.
