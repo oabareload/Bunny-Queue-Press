@@ -27,7 +27,7 @@ final class Editor_Assets {
 	}
 
 	/**
-	 * Enqueues the queue action script for the post editor.
+	 * Enqueues the queue action script and styles for the post editor.
 	 *
 	 * @return void
 	 */
@@ -41,9 +41,16 @@ final class Editor_Assets {
 		wp_enqueue_script(
 			'wp-queuepress-editor',
 			WP_QUEUEPRESS_PLUGIN_URL . 'assets/js/editor.js',
-			array('wp-api-fetch', 'wp-components', 'wp-data', 'wp-edit-post', 'wp-element', 'wp-hooks', 'wp-i18n', 'wp-plugins'),
+			array('wp-api-fetch', 'wp-components', 'wp-data', 'wp-edit-post', 'wp-editor', 'wp-element', 'wp-i18n', 'wp-plugins'),
 			WP_QUEUEPRESS_VERSION,
 			true
+		);
+
+		wp_enqueue_style(
+			'wp-queuepress-editor',
+			WP_QUEUEPRESS_PLUGIN_URL . 'assets/css/editor.css',
+			array(),
+			WP_QUEUEPRESS_VERSION
 		);
 
 		wp_set_script_translations('wp-queuepress-editor', 'wp-queuepress', WP_QUEUEPRESS_PLUGIN_DIR . 'languages');

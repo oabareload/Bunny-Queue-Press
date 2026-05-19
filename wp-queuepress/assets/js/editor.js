@@ -2,37 +2,30 @@
 	'use strict';
 
 	var __ = wp.i18n.__;
-	var ToggleControl = wp.components.ToggleControl;
-	var PluginDocumentSettingPanel = wp.editPost.PluginDocumentSettingPanel;
-	var createElement = wp.element.createElement;
-	var useState = wp.element.useState;
-	var useEffect = wp.element.useEffect;
-	var useSelect = wp.data.useSelect;
-	var useDispatch = wp.data.useDispatch;
-	var registerPlugin = wp.plugins.registerPlugin;
-	var apiFetch = wp.apiFetch;
+	var RadioControl   = wp.components.RadioControl;
+	var Spinner        = wp.components.Spinner;
+	var Button         = wp.components.Button;
+	var Modal          = wp.components.Modal;
 
-	/**
-	 * AddToQueue toggle for Gutenberg editor — Bunny Queue Press 1.2.1.
-	 *
-	 * Model:
-	 *   - Finds the next free configured slot via REST GET /next-slot.
-	 *   - Applies it with editPost({ date: isoString }) only — no status change.
-	 *   - Gutenberg's own logic converts the Publish button to Schedule when
-	 *     the editor date is in the future. No interception needed.
-	 *   - Autosave is disabled while the toggle is on to prevent autosave from
-	 *     silently committing the future date as a scheduled post.
-	 *   - Autosave is re-enabled the moment the toggle is turned off.
-	 *
-	 * What this component never does:
-	 *   - Never calls editPost({ status: ... })
-	 *   - Never calls wp_update_post (server-side)
-	 *   - Never locks or intercepts the Publish / Schedule button
-	 *   - Never modifies post_date except through editPost({ date })
-	 */
-	function AddToQueuePanel() {
-		// ── Selectors (top-level only — no hooks inside callbacks) ────────────────
+	// wp.editor.* is the correct namespace since WP 6.6
+	// (wp.editPost.* still works but emits deprecation warnings).
+	var PluginDocumentSettingPanel = (wp.editor && wp.editor.PluginDocumentSettingPanel)
+		|| wp.editPost.PluginDocumentSettingPanel;
+	var PluginPrePublishPanel = (wp.editor && wp.editor.PluginPrePublishPanel)
+		|| wp.editPost.PluginPrePublishPanel;
 
+	var createElement    = wp.element.createElement;
+	var Fragment         = wp.element.Fragment;
+	var useState         = wp.element.useState;
+	var useEffect        = wp.element.useEffect;
+	var useSelect        = wp.data.useSelect;
+	var useDispatch      = wp.data.useDispatch;
+	var registerPlugin   = wp.plugins.registerPlugin;
+	var apiFetch         = wp.apiFetch;
+
+	// ─── Main panel component ─────────────────────────────────────────────────────
+
+	function QueueModePanel() {
 		var postId = useSelect(function (select) {
 			return select('core/editor').getCurrentPostId();
 		}, []);
@@ -41,203 +34,361 @@
 			return select('core/editor').getEditedPostAttribute('status');
 		}, []);
 
-		// BUG 2 FIX — source of truth for initial toggle state on mount/reload.
-		// Already populated by Gutenberg from the server-provided post data, so
-		// it correctly reflects a previously queued draft on page reload.
-		var postDate = useSelect(function (select) {
-			return select('core/editor').getEditedPostAttribute('date') || '';
+		var meta = useSelect(function (select) {
+			return select('core/editor').getEditedPostAttribute('meta') || {};
+		}, []);
+
+		// Site timezone string shown in the confirmation panel.
+		var siteTz = useSelect(function (select) {
+			var site = select('core').getSite() || {};
+			return site.timezone_string
+				|| (site.gmt_offset !== undefined
+					? 'UTC' + (site.gmt_offset >= 0 ? '+' : '') + site.gmt_offset
+					: 'UTC');
 		}, []);
 
 		var editorDispatch   = useDispatch('core/editor');
+		var noticesDispatch  = useDispatch('core/notices');
 		var editPost         = editorDispatch.editPost;
 		var lockAutosaving   = editorDispatch.lockPostAutosaving;
 		var unlockAutosaving = editorDispatch.unlockPostAutosaving;
-		var noticesDispatch  = useDispatch('core/notices');
+		var savePost         = editorDispatch.savePost;
+		var LOCK_KEY         = 'wp-queuepress';
 
-		// ── State ─────────────────────────────────────────────────────────────────
+		var storedMode  = (meta && meta._wp_queuepress_queue_mode) ? meta._wp_queuepress_queue_mode : '';
+		var initialMode = storedMode || 'none';
 
-		// BUG 2 FIX — initialise from derived post state so the toggle survives
-		// page reloads. A draft with a future post_date is the only persistent
-		// evidence that AddToQueue was previously enabled. No meta needed.
-		// Selectors are declared above so their values are available here.
-		var isQueuedDraft = postStatus === 'draft' && !!postDate && new Date(postDate) > new Date();
+		var modeRes     = useState(initialMode);
+		var mode        = modeRes[0];
+		var setMode     = modeRes[1];
 
-		var enabledState = useState(isQueuedDraft);
-		var isEnabled    = enabledState[0];
-		var setIsEnabled = enabledState[1];
+		var loadRes     = useState(false);
+		var isLoading   = loadRes[0];
+		var setIsLoading = loadRes[1];
 
-		var fetchingState = useState(false);
-		var isFetching    = fetchingState[0];
-		var setIsFetching = fetchingState[1];
+		// slotInfo: { date, time, iso } – estimated slot for the new post
+		var slotRes     = useState(null);
+		var slotInfo    = slotRes[0];
+		var setSlotInfo = slotRes[1];
 
-		// Slot string shown in help text, e.g. "Tuesday Jun 10 at 09:00".
-		var slotState    = useState('');
-		var slotLabel    = slotState[0];
-		var setSlotLabel = slotState[1];
+		var errRes        = useState('');
+		var errorMessage  = errRes[0];
+		var setErrorMessage = errRes[1];
 
-		// ── Autosave lock ─────────────────────────────────────────────────────────
-		//
-		// When AddToQueue is on, autosave is locked so Gutenberg cannot silently
-		// commit the future date and turn the draft into a scheduled post without
-		// the user explicitly clicking Schedule.
-		//
-		// lockPostAutosaving / unlockPostAutosaving are the correct APIs for this:
-		// they suppress autosave only, leaving manual Save Draft and the Schedule
-		// button entirely unaffected.
-		//
-		// The cleanup function always unlocks so the lock is never left stranded
-		// if the component unmounts (e.g. the user navigates away mid-session).
+		// addFirstPreview: { new_post: {...}, affected: [...] } | null
+		// Populated when mode === 'add_first' and the user clicks Schedule.
+		var previewRes    = useState(null);
+		var addFirstPreview = previewRes[0];
+		var setAddFirstPreview = previewRes[1];
 
-		var AUTOSAVE_LOCK = 'wp-queuepress';
+		// showModal: true while the AddFirst confirmation modal is open.
+		var modalRes    = useState(false);
+		var showModal   = modalRes[0];
+		var setShowModal = modalRes[1];
 
+		// Autosave lock: hold while a queue mode is active so Gutenberg cannot
+		// silently auto-save the post to "future" before the user confirms.
 		useEffect(function () {
-			if (isEnabled) {
-				lockAutosaving(AUTOSAVE_LOCK);
+			if ('none' !== mode) {
+				lockAutosaving(LOCK_KEY);
 			} else {
-				unlockAutosaving(AUTOSAVE_LOCK);
+				unlockAutosaving(LOCK_KEY);
 			}
-
-			return function () {
-				unlockAutosaving(AUTOSAVE_LOCK);
-			};
-		}, [isEnabled]);
+			return function () { unlockAutosaving(LOCK_KEY); };
+		}, [mode]);
 
 		// ── Helpers ───────────────────────────────────────────────────────────────
 
-		/**
-		 * Formats a Y-m-d + H:i pair into a human-readable label.
-		 *
-		 * @param {string} date  "Y-m-d"
-		 * @param {string} time  "H:i"
-		 * @returns {string}
-		 */
-		function formatSlot(date, time) {
-			// "T" separator makes the string valid ISO 8601 across all browsers.
+		function formatSlotLabel(date, time) {
+			if (!date || !time) { return ''; }
 			var d = new Date(date + 'T' + time + ':00');
-			return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-				+ ' at '
-				+ d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+			return d.toLocaleDateString(undefined, {
+				weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+			}) + ' at ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 		}
 
-		// ── Event handler ─────────────────────────────────────────────────────────
+		function setQueueMeta(nextMode) {
+			var nextMeta = Object.assign({}, meta);
+			if ('none' === nextMode) {
+				delete nextMeta._wp_queuepress_queue_mode;
+			} else {
+				nextMeta._wp_queuepress_queue_mode = nextMode;
+			}
+			editPost({ meta: nextMeta });
+		}
 
-		/**
-		 * Handles toggle changes.
-		 *
-		 * Enable path (optimistic):
-		 *   1. Mark as enabled immediately so the toggle visually checks.
-		 *   2. GET /next-slot — read-only, no server-side write.
-		 *   3. On success: apply the slot date via editPost({ date }).
-		 *      Gutenberg sees a future date and changes "Publish" → "Schedule".
-		 *   4. On failure: roll back the toggle state and show an error notice.
-		 *
-		 * Disable path (immediate):
-		 *   1. Clear the queue date via editPost({ date: '' }).
-		 *      Gutenberg reverts "Schedule" → "Publish" / "Save Draft".
-		 *   2. Mark as disabled — no API call needed.
-		 *
-		 * Rules of Hooks: no hook calls inside this function.
-		 *
-		 * @param {boolean} checked New toggle state.
-		 */
-		function onToggleChange(checked) {
-			if (!postId || isFetching) {
+		function clearQueueMode(id) {
+			return apiFetch({
+				path: '/wp-queuepress/v1/posts/' + id + '/queue-mode',
+				method: 'DELETE'
+			});
+		}
+
+		// ── Mode change ───────────────────────────────────────────────────────────
+
+		function onModeChange(nextMode) {
+			if (!postId || isLoading) { return; }
+
+			setMode(nextMode);
+			setSlotInfo(null);
+			setAddFirstPreview(null);
+			setShowModal(false);
+			setErrorMessage('');
+			setQueueMeta(nextMode);
+
+			if ('none' === nextMode) {
+				setIsLoading(true);
+				editPost({ date: null, status: 'draft' });
+				clearQueueMode(postId)
+					.catch(function () {})
+					.finally(function () { setIsLoading(false); });
 				return;
 			}
 
-			if (checked) {
-				// Optimistic enable: check the toggle now, fill the slot in asynchronously.
-				setIsEnabled(true);
-				setIsFetching(true);
-				setSlotLabel('');
+			setIsLoading(true);
 
-				apiFetch({
-					path: '/wp-queuepress/v1/posts/' + postId + '/next-slot',
-					method: 'GET'
-				}).then(function (response) {
-					// Apply the slot date to the editor — native Gutenberg scheduling.
-					// DO NOT set status. Gutenberg handles the "Publish" → "Schedule"
-					// button text change on its own when post.date is in the future.
-					editPost({ date: response.iso });
-					setSlotLabel(formatSlot(response.date, response.time));
-
-					noticesDispatch.createSuccessNotice(
-						__('Next available slot reserved.', 'wp-queuepress'),
-						{ type: 'snackbar' }
-					);
-				}).catch(function (error) {
-					// Roll back toggle. Use current time so the editor returns to a
-					// normal draft state — not the future slot, not '' (REST rejects it).
-					setIsEnabled(false);
-					setSlotLabel('');
-					editPost({ date: new Date().toISOString() });
-
-					noticesDispatch.createErrorNotice(
-						error.message || __('No free publishing slots are currently available.', 'wp-queuepress'),
-						{ type: 'snackbar' }
-					);
-				}).finally(function () {
-					setIsFetching(false);
-				});
-
-			} else {
-				// Disable: set date to now so the post returns to a normal draft/publish
-				// state. This clears the future slot from the editor and the saved post.
-				// - new Date().toISOString() is always a valid REST date-time string
-				// - a past/present date makes Gutenberg show Publish, not Schedule
-				// - on Save Draft this current date is written to post_date, so
-				//   isQueuedDraft evaluates to false on next reload — toggle stays OFF
-				setIsEnabled(false);
-				setSlotLabel('');
-				editPost({ date: new Date().toISOString() });
-			}
+			apiFetch({
+				path: '/wp-queuepress/v1/posts/' + postId + '/next-slot?mode=' + nextMode,
+				method: 'GET'
+			}).then(function (response) {
+				setSlotInfo({ date: response.date, time: response.time, iso: response.iso });
+				editPost({ date: response.iso });
+				noticesDispatch.createSuccessNotice(
+					__('Queue preview updated.', 'wp-queuepress'),
+					{ type: 'snackbar' }
+				);
+			}).catch(function (error) {
+				setMode('none');
+				setQueueMeta('none');
+				setSlotInfo(null);
+				var msg = error.message || __('No free publishing slots are currently available.', 'wp-queuepress');
+				setErrorMessage(msg);
+				clearQueueMode(postId);
+				noticesDispatch.createErrorNotice(msg, { type: 'snackbar' });
+			}).finally(function () {
+				setIsLoading(false);
+			});
 		}
 
-		// ── Render guard ──────────────────────────────────────────────────────────
+		// ── AddFirst: Schedule button handler ─────────────────────────────────────
+		// Called when user clicks "Schedule" in Gutenberg while mode is add_first.
+		// Fetches the full preview from the server, then shows the confirmation modal.
+		// The actual save is deferred until the user clicks "Confirm" in the modal.
 
-		// Hide the panel for posts that are already published.
-		// Future (scheduled) posts and drafts always show the panel.
-		if (!postId || postStatus === 'publish') {
-			return null;
+		function onScheduleAddFirst() {
+			setIsLoading(true);
+			apiFetch({
+				path: '/wp-queuepress/v1/posts/' + postId + '/add-first-preview',
+				method: 'GET'
+			}).then(function (preview) {
+				setAddFirstPreview(preview);
+				setShowModal(true);
+			}).catch(function (error) {
+				var msg = error.message || __('Could not load queue preview.', 'wp-queuepress');
+				setErrorMessage(msg);
+				noticesDispatch.createErrorNotice(msg, { type: 'snackbar' });
+			}).finally(function () {
+				setIsLoading(false);
+			});
 		}
 
-		// ── Help text ─────────────────────────────────────────────────────────────
-
-		var helpText;
-		if (isFetching) {
-			helpText = __('Finding next available slot\u2026', 'wp-queuepress');
-		} else if (isEnabled && slotLabel) {
-			helpText = __('Slot: ', 'wp-queuepress') + slotLabel
-				+ ' \u2014 ' + __('Click Schedule to confirm.', 'wp-queuepress');
-		} else if (isEnabled) {
-			helpText = __('Slot reserved. Click Schedule to publish at that time.', 'wp-queuepress');
-		} else {
-			helpText = __('Reserve the next available slot. You must still click Schedule to publish.', 'wp-queuepress');
+		function onModalConfirm() {
+			setShowModal(false);
+			// Unlock autosave so WordPress can proceed with the full save.
+			unlockAutosaving(LOCK_KEY);
+			savePost();
+			// Re-lock is not needed — once saved the post is scheduled and the
+			// mode clears from meta, so the effect will call unlockAutosaving.
 		}
+
+		function onModalCancel() {
+			setShowModal(false);
+			// Keep the autosave lock in place; the user changed their mind.
+		}
+
+		// ── Early exit ────────────────────────────────────────────────────────────
+
+		if (!postId || postStatus === 'publish') { return null; }
+
+		// ── Derived display values ────────────────────────────────────────────────
+
+		var isQueueMode = ('add_to_queue' === mode || 'add_first' === mode);
+		var slotLabel   = slotInfo ? formatSlotLabel(slotInfo.date, slotInfo.time) : '';
+
+		var helpText = __('Choose how QueuePress should prepare this post.', 'wp-queuepress');
+		if (isLoading) {
+			helpText = __('Calculating preview...', 'wp-queuepress');
+		} else if (errorMessage) {
+			helpText = errorMessage;
+		} else if (slotLabel) {
+			var prefix = 'add_first' === mode
+				? __('Estimated first slot: ', 'wp-queuepress')
+				: __('Estimated slot: ', 'wp-queuepress');
+			helpText = prefix + slotLabel;
+		}
+
+		// ── Pre-publish panel (add_to_queue only) ─────────────────────────────────
+		// For add_to_queue we use PluginPrePublishPanel — shows in Gutenberg's
+		// native pre-publish checklist when the user clicks Schedule.
+		// For add_first we show our own modal (see below) so we intercept
+		// the Schedule action via a custom button in the panel instead.
+		var prePublishPanel = ('add_to_queue' === mode && slotInfo)
+			? createElement(
+				PluginPrePublishPanel,
+				{
+					name: 'wp-queuepress-prepublish',
+					title: __('QueuePress Scheduling', 'wp-queuepress'),
+					initialOpen: true
+				},
+				createElement('p', { style: { margin: '0 0 4px' } },
+					__('This post will be scheduled at:', 'wp-queuepress')
+				),
+				createElement('p', { style: { fontWeight: 600, margin: '0 0 8px' } }, slotLabel),
+				createElement('p', { style: { color: '#757575', fontSize: '12px', margin: 0 } },
+					__('Site timezone: ', 'wp-queuepress') + siteTz
+				)
+			)
+			: null;
+
+		// ── AddFirst confirmation modal ───────────────────────────────────────────
+		// Shows: new post slot + list of all affected (shifted) scheduled posts.
+		var confirmModal = (showModal && addFirstPreview)
+			? createElement(
+				Modal,
+				{
+					title: __('Confirm Queue Rebuild (Add First)', 'wp-queuepress'),
+					onRequestClose: onModalCancel,
+					size: 'medium'
+				},
+				// New post row
+				createElement('p', { style: { marginBottom: '4px', fontWeight: 600 } },
+					__('Your post will be scheduled at:', 'wp-queuepress')
+				),
+				createElement('p', { style: { marginBottom: '16px' } },
+					addFirstPreview.new_post.new_date_label
+				),
+				// Affected posts list
+				addFirstPreview.affected.length > 0
+					? createElement(
+						Fragment,
+						null,
+						createElement('p', { style: { fontWeight: 600, marginBottom: '4px' } },
+							__('The following scheduled posts will be shifted:', 'wp-queuepress')
+						),
+						createElement(
+							'table',
+							{ style: { width: '100%', borderCollapse: 'collapse', marginBottom: '16px', fontSize: '13px' } },
+							createElement('thead', null,
+								createElement('tr', null,
+									createElement('th', { style: { textAlign: 'left', paddingBottom: '4px', borderBottom: '1px solid #ddd' } }, __('Post', 'wp-queuepress')),
+									createElement('th', { style: { textAlign: 'left', paddingBottom: '4px', borderBottom: '1px solid #ddd' } }, __('Current date', 'wp-queuepress')),
+									createElement('th', { style: { textAlign: 'left', paddingBottom: '4px', borderBottom: '1px solid #ddd' } }, __('New date', 'wp-queuepress'))
+								)
+							),
+							createElement(
+								'tbody',
+								null,
+								addFirstPreview.affected.map(function (item) {
+									return createElement('tr', { key: item.id },
+										createElement('td', { style: { padding: '4px 8px 4px 0' } }, item.title || '#' + item.id),
+										createElement('td', { style: { padding: '4px 8px 4px 0', color: '#757575' } }, item.old_date_label),
+										createElement('td', { style: { padding: '4px 0', color: '#1e1e1e' } }, item.new_date_label)
+									);
+								})
+							)
+						)
+					)
+					: createElement('p', { style: { color: '#757575', marginBottom: '16px' } },
+						__('No other scheduled posts will be affected.', 'wp-queuepress')
+					),
+				// Timezone note
+				createElement('p', { style: { color: '#757575', fontSize: '12px', marginBottom: '20px' } },
+					__('Site timezone: ', 'wp-queuepress') + siteTz
+				),
+				// Action buttons
+				createElement(
+					'div',
+					{ style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } },
+					createElement(Button, { variant: 'primary', onClick: onModalConfirm },
+						__('Confirm & Schedule', 'wp-queuepress')
+					),
+					createElement(Button, { variant: 'tertiary', onClick: onModalCancel },
+						__('Cancel', 'wp-queuepress')
+					)
+				)
+			)
+			: null;
+
+		// ── AddFirst: custom "Schedule" button in pre-publish panel ───────────────
+		// When mode is add_first, we render a PluginPrePublishPanel with our own
+		// button. The user clicks it → we fetch the preview → show the modal.
+		// The native Gutenberg "Schedule" button is still present but the autosave
+		// lock prevents it from completing the save until we unlock it.
+		var addFirstPrePublishPanel = ('add_first' === mode && slotInfo)
+			? createElement(
+				PluginPrePublishPanel,
+				{
+					name: 'wp-queuepress-addfirst-prepublish',
+					title: __('QueuePress Add First', 'wp-queuepress'),
+					initialOpen: true
+				},
+				createElement('p', { style: { margin: '0 0 4px' } },
+					__('This post will go first in the queue. All scheduled posts will shift forward.', 'wp-queuepress')
+				),
+				createElement('p', { style: { fontWeight: 600, margin: '0 0 8px' } },
+					__('Estimated first slot: ', 'wp-queuepress') + slotLabel
+				),
+				isLoading
+					? createElement(Spinner, null)
+					: createElement(Button,
+						{ variant: 'primary', onClick: onScheduleAddFirst, style: { marginTop: '4px' } },
+						__('Review & Confirm Queue Rebuild', 'wp-queuepress')
+					)
+			)
+			: null;
 
 		// ── Render ────────────────────────────────────────────────────────────────
 
 		return createElement(
-			PluginDocumentSettingPanel,
-			{
-				name: 'wp-queuepress-panel',
-				title: __('Add to Queue', 'wp-queuepress'),
-				icon: 'calendar-alt'
-			},
+			Fragment,
+			null,
 			createElement(
-				ToggleControl,
+				PluginDocumentSettingPanel,
 				{
-					label: __('Reserve next available slot', 'wp-queuepress'),
-					help: helpText,
-					checked: isEnabled,
-					onChange: onToggleChange,
-					disabled: isFetching
-				}
-			)
+					name: 'wp-queuepress-panel',
+					title: __('QueuePress', 'wp-queuepress'),
+					icon: 'calendar-alt'
+				},
+				createElement(RadioControl, {
+					label: __('Queue mode', 'wp-queuepress'),
+					selected: mode,
+					disabled: isLoading,
+					options: [
+						{ label: __('None',         'wp-queuepress'), value: 'none'        },
+						{ label: __('Add to Queue', 'wp-queuepress'), value: 'add_to_queue' },
+						{ label: __('Add First',    'wp-queuepress'), value: 'add_first'    }
+					],
+					onChange: onModeChange
+				}),
+				isLoading ? createElement(Spinner, null) : null,
+				createElement(
+					'p',
+					{
+						className: errorMessage
+							? 'components-base-control__help is-error'
+							: 'components-base-control__help'
+					},
+					helpText
+				)
+			),
+			prePublishPanel,
+			addFirstPrePublishPanel,
+			confirmModal
 		);
 	}
 
 	registerPlugin('wp-queuepress', {
-		render: AddToQueuePanel
+		render: QueueModePanel
 	});
+
 }(window.wp));

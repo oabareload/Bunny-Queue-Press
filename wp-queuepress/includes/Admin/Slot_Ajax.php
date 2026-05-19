@@ -11,6 +11,7 @@ namespace QueuePostScheduler\Admin;
 
 use DateTimeImmutable;
 use QueuePostScheduler\Schedule\Post_Query;
+use QueuePostScheduler\Schedule\Queue_Rebuilder;
 use QueuePostScheduler\Schedule\Schedule_Calculator;
 use QueuePostScheduler\Schedule\Slot_Repository;
 use QueuePostScheduler\Settings\Preferences;
@@ -165,60 +166,13 @@ final class Slot_Ajax {
 			wp_send_json_error(array('message' => __('No pending rebuild plan found.', 'wp-queuepress')), 400);
 		}
 
-		$plan = $pending['plan'];
-		$results = array('total' => count($plan), 'applied' => 0, 'conflicts' => array());
-
-		foreach ($plan as $item) {
-			$post_id = isset($item['post_id']) ? (int) $item['post_id'] : 0;
-			$old_date = isset($item['old_date']) ? (string) $item['old_date'] : '';
-			$new_date = isset($item['new_date']) ? (string) $item['new_date'] : '';
-
-			if ($post_id <= 0) {
-				$results['conflicts'][] = array('post_id' => $post_id, 'message' => 'Invalid post id');
-				continue;
-			}
-
-			$post = get_post($post_id);
-			if (! $post instanceof \WP_Post) {
-				$results['conflicts'][] = array('post_id' => $post_id, 'message' => 'Post not found');
-				continue;
-			}
-
-			// Only operate on posts that are still scheduled.
-			if ('future' !== $post->post_status) {
-				$results['conflicts'][] = array('post_id' => $post_id, 'message' => 'Post status is not "future"');
-				continue;
-			}
-
-			// Optional verification: compare current post_date with stored old_date (best-effort).
-			if ($old_date && $post->post_date !== $old_date) {
-				$results['conflicts'][] = array('post_id' => $post_id, 'message' => 'Current post_date differs from plan old_date', 'post_date' => $post->post_date, 'expected_old_date' => $old_date);
-				// continue with update despite mismatch
-			}
-
-			// Convert new_date (ISO) into site-local MySQL datetime.
-			try {
-				$dt = new \DateTimeImmutable($new_date);
-				$dt = $dt->setTimezone(wp_timezone());
-				$new_date_local = $dt->format('Y-m-d H:i:s');
-			} catch (\Throwable $ex) {
-				$results['conflicts'][] = array('post_id' => $post_id, 'message' => 'Invalid new_date format', 'new_date' => $new_date);
-				continue;
-			}
-
-			$update = wp_update_post(array(
-				'ID' => $post_id,
-				'post_date' => $new_date_local,
-				'post_date_gmt' => get_gmt_from_date($new_date_local),
-			), true);
-
-			if (is_wp_error($update)) {
-				$results['conflicts'][] = array('post_id' => $post_id, 'message' => $update->get_error_message());
-				continue;
-			}
-
-			$results['applied']++;
-		}
+		$rebuilder = new Queue_Rebuilder(
+			$this->slot_repository,
+			$this->post_query,
+			$this->schedule_calculator,
+			$this->preferences
+		);
+		$results   = $rebuilder->apply_plan($pending['plan']);
 
 		// Remove pending plan after attempting the application.
 		delete_option('qps_pending_rebuild');

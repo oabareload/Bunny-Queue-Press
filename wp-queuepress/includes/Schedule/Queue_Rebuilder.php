@@ -73,7 +73,6 @@ final class Queue_Rebuilder {
             $free = $this->schedule_calculator->get_free_slots($start, $end, $occupied_posts);
 
             foreach ($free as $slot) {
-                // slot contains 'date' and 'time'
                 $slot_dt = new DateTimeImmutable($slot['date'] . ' ' . $slot['time'], $timezone);
                 if ($slot_dt > $now) {
                     $available_slots[] = $slot_dt;
@@ -88,14 +87,13 @@ final class Queue_Rebuilder {
         foreach ($posts as $post) {
             /** @var WP_Post $post */
             if (empty($available_slots)) {
-                // No slots left within search window: record as conflict.
                 $conflicts[] = array('post_id' => (int) $post->ID);
                 continue;
             }
 
             $slot_dt = array_shift($available_slots);
 
-            $old_date = (string) $post->post_date; // local site time string
+            $old_date = (string) $post->post_date;
             $new_date = $slot_dt->format(DATE_ATOM);
 
             $plan_items[] = array(
@@ -121,6 +119,317 @@ final class Queue_Rebuilder {
         update_option('qps_pending_rebuild', $plan);
 
         return $plan;
+    }
+
+    /**
+     * Computes a preview of the Add First rebuild WITHOUT requiring the post
+     * to be already `future`. Safe to call from the REST preview endpoint
+     * while the post is still a draft.
+     *
+     * The new post is placed first using the first available slot;
+     * existing scheduled posts follow in their current relative order.
+     * Nothing is written to the DB.
+     *
+     * @param int $post_id The post being queued (still draft at this point).
+     * @return array<int,array<string,mixed>> Plan items: post_id, old_date, new_date.
+     */
+    public function compute_add_first_preview(int $post_id): array {
+        $new_post = get_post($post_id);
+
+        if (! $new_post instanceof WP_Post) {
+            return array();
+        }
+
+        // Query all existing scheduled posts, excluding the new one (it is
+        // still a draft, but exclude by ID defensively).
+        $query = new \WP_Query(
+            array(
+                'post_type'              => $new_post->post_type,
+                'post_status'            => 'future',
+                'posts_per_page'         => -1,
+                'orderby'                => array('date' => 'ASC', 'ID' => 'ASC'),
+                'ignore_sticky_posts'    => true,
+                'no_found_rows'          => true,
+                'update_post_meta_cache' => false,
+                'update_post_term_cache' => false,
+            )
+        );
+
+        $scheduled_posts = array_values(
+            array_filter(
+                $query->posts,
+                static function (WP_Post $post) use ($post_id): bool {
+                    return (int) $post->ID !== $post_id;
+                }
+            )
+        );
+
+        // Total slots needed: 1 (new post) + all existing scheduled posts.
+        $total = 1 + count($scheduled_posts);
+        $slots = $this->get_future_slots_for_plan($total);
+
+        if (count($slots) < $total) {
+            return array();
+        }
+
+        $plan = array();
+
+        // Slot 0 -> new post.
+        $slot_dt = array_shift($slots);
+        $plan[]  = array(
+            'post_id'  => (int) $new_post->ID,
+            'old_date' => (string) $new_post->post_date, // draft date, for reference
+            'new_date' => $slot_dt->format(DATE_ATOM),
+        );
+
+        // Remaining slots -> existing scheduled posts in relative order.
+        foreach ($scheduled_posts as $post) {
+            $slot_dt = array_shift($slots);
+            $plan[]  = array(
+                'post_id'  => (int) $post->ID,
+                'old_date' => (string) $post->post_date,
+                'new_date' => $slot_dt->format(DATE_ATOM),
+            );
+        }
+
+        return $plan;
+    }
+
+    /**
+     * Computes an Add First plan with the new post inserted at the front.
+     *
+     * Runs AFTER the new post is already `future` in the DB (called from
+     * Queue_Commit_Handler::commit_queue_mode). Reads fresh post_date values
+     * via clean_post_cache so old_date matches actual DB state.
+     *
+     * The current scheduled posts keep their existing relative order.
+     * The returned plan is compute-only and safe to pass directly to apply_plan().
+     *
+     * @param int $post_id Newly scheduled post ID.
+     * @return array<int,array<string,mixed>> Rebuild plan items.
+     */
+    public function compute_add_first_plan(int $post_id): array {
+        // Flush object cache so we read the actual current DB state.
+        clean_post_cache($post_id);
+        $new_post = get_post($post_id);
+
+        if (! $new_post instanceof WP_Post) {
+            return array();
+        }
+
+        // Query ALL currently scheduled posts of the same type.
+        $query = new \WP_Query(
+            array(
+                'post_type'              => $new_post->post_type,
+                'post_status'            => 'future',
+                'posts_per_page'         => -1,
+                'orderby'                => array('date' => 'ASC', 'ID' => 'ASC'),
+                'ignore_sticky_posts'    => true,
+                'no_found_rows'          => true,
+                'update_post_meta_cache' => false,
+                'update_post_term_cache' => false,
+            )
+        );
+
+        // All currently scheduled posts, excluding the new post.
+        $scheduled_posts = array_values(
+            array_filter(
+                $query->posts,
+                static function (WP_Post $post) use ($post_id): bool {
+                    return (int) $post->ID !== $post_id;
+                }
+            )
+        );
+
+        // New post goes first; existing scheduled posts follow in relative order.
+        $queue_posts = array_merge(array($new_post), $scheduled_posts);
+
+        // Get exactly as many unique, non-overlapping future slots as we need.
+        $slots = $this->get_future_slots_for_plan(count($queue_posts));
+
+        if (count($slots) < count($queue_posts)) {
+            return array();
+        }
+
+        $plan = array();
+
+        foreach ($queue_posts as $post) {
+            // Re-read post_date fresh so old_date is always accurate.
+            clean_post_cache((int) $post->ID);
+            $fresh      = get_post((int) $post->ID);
+            $old_date   = $fresh instanceof WP_Post ? (string) $fresh->post_date : (string) $post->post_date;
+
+            $slot_dt = array_shift($slots);
+
+            $plan[] = array(
+                'post_id'  => (int) $post->ID,
+                'old_date' => $old_date,
+                'new_date' => $slot_dt->format(DATE_ATOM),
+            );
+        }
+
+        return $plan;
+    }
+
+    /**
+     * Applies precomputed post-date changes without recalculating the plan.
+     *
+     * Eligible post statuses: future, draft, pending, private.
+     * Published posts are never touched.
+     *
+     * @param array<int,array<string,mixed>> $plan Rebuild plan items.
+     * @return array<string,mixed> Application summary.
+     */
+    public function apply_plan(array $plan): array {
+        $results = array('total' => count($plan), 'applied' => 0, 'conflicts' => array());
+
+        foreach ($plan as $item) {
+            $post_id  = isset($item['post_id']) ? (int) $item['post_id'] : 0;
+            $old_date = isset($item['old_date']) ? (string) $item['old_date'] : '';
+            $new_date = isset($item['new_date']) ? (string) $item['new_date'] : '';
+
+            if ($post_id <= 0) {
+                $results['conflicts'][] = array('post_id' => $post_id, 'message' => 'Invalid post id');
+                continue;
+            }
+
+            $post = get_post($post_id);
+            if (! $post instanceof WP_Post) {
+                $results['conflicts'][] = array('post_id' => $post_id, 'message' => 'Post not found');
+                continue;
+            }
+
+            // Only touch posts that are not yet published.
+            if (! in_array($post->post_status, array('future', 'draft', 'pending', 'private'), true)) {
+                $results['conflicts'][] = array(
+                    'post_id' => $post_id,
+                    'message' => 'Post status not eligible for queue move: ' . $post->post_status,
+                );
+                continue;
+            }
+
+            if ($old_date && $post->post_date !== $old_date) {
+                // Log the discrepancy but continue — old_date may differ legitimately
+                // when the same post appears earlier in the plan and was already updated.
+                $results['conflicts'][] = array(
+                    'post_id'           => $post_id,
+                    'message'           => 'Current post_date differs from plan old_date (non-blocking)',
+                    'post_date'         => $post->post_date,
+                    'expected_old_date' => $old_date,
+                );
+            }
+
+            try {
+                $dt             = new DateTimeImmutable($new_date);
+                $dt             = $dt->setTimezone(wp_timezone());
+                $new_date_local = $dt->format('Y-m-d H:i:s');
+            } catch (\Throwable $ex) {
+                $results['conflicts'][] = array('post_id' => $post_id, 'message' => 'Invalid new_date format', 'new_date' => $new_date);
+                continue;
+            }
+
+            // Do NOT pass post_status here: wp_update_post derives it automatically
+            // from post_date_gmt vs now. Passing 'future' explicitly can confuse
+            // WordPress when the existing status is already 'future' and causes
+            // the update to be silently skipped on some versions.
+            $update = wp_update_post(
+                array(
+                    'ID'            => $post_id,
+                    'post_date'     => $new_date_local,
+                    'post_date_gmt' => get_gmt_from_date($new_date_local),
+                ),
+                true
+            );
+
+            if (is_wp_error($update)) {
+                $results['conflicts'][] = array('post_id' => $post_id, 'message' => $update->get_error_message());
+                continue;
+            }
+
+            $results['applied']++;
+        }
+
+        return $results;
+    }
+
+    /**
+     * Returns $limit unique future slots, reserving each one as it is assigned
+     * so no two slots ever collide (correct method for full-queue plans).
+     *
+     * @param int $limit Number of slots needed.
+     * @return array<int,DateTimeImmutable>
+     */
+    private function get_future_slots_for_plan(int $limit): array {
+        $timezone       = wp_timezone();
+        $now            = new DateTimeImmutable('now', $timezone);
+        $week_start     = $this->get_start_of_week($now);
+        $occupied_posts = array((object) array('post_date' => '1970-01-01 00:00:00', 'ID' => 0));
+        $slots          = array();
+
+        for ($week = 0; $week < self::SEARCH_WEEKS && count($slots) < $limit; $week++) {
+            $start = $week_start->modify('+' . $week . ' weeks');
+            $end   = $start->modify('+6 days')->setTime(23, 59, 59);
+            $free  = $this->schedule_calculator->get_free_slots($start, $end, $occupied_posts);
+
+            foreach ($free as $slot) {
+                $slot_dt = new DateTimeImmutable($slot['date'] . ' ' . $slot['time'], $timezone);
+
+                if ($slot_dt <= $now) {
+                    continue;
+                }
+
+                $slots[] = $slot_dt;
+
+                // Mark this slot as occupied immediately so the next iteration
+                // sees it and never returns the same datetime again.
+                $occupied_posts[] = (object) array(
+                    'post_date' => $slot_dt->format('Y-m-d H:i:s'),
+                    'ID'        => count($slots), // synthetic unique ID
+                );
+
+                if (count($slots) >= $limit) {
+                    break;
+                }
+            }
+        }
+
+        return $slots;
+    }
+
+    /**
+     * Returns the next configured future slots in deterministic order.
+     * NOTE: Does NOT reserve slots between iterations — use get_future_slots_for_plan()
+     * when building multi-post plans to avoid duplicate slots.
+     *
+     * @param int $limit Number of slots needed.
+     * @return array<int,DateTimeImmutable>
+     */
+    private function get_future_slots(int $limit): array {
+        $timezone       = wp_timezone();
+        $now            = new DateTimeImmutable('now', $timezone);
+        $week_start     = $this->get_start_of_week($now);
+        $occupied_posts = array((object) array('post_date' => '1970-01-01 00:00:00', 'ID' => 0));
+        $slots          = array();
+
+        for ($week = 0; $week < self::SEARCH_WEEKS && count($slots) < $limit; $week++) {
+            $start = $week_start->modify('+' . $week . ' weeks');
+            $end   = $start->modify('+6 days')->setTime(23, 59, 59);
+            $free  = $this->schedule_calculator->get_free_slots($start, $end, $occupied_posts);
+
+            foreach ($free as $slot) {
+                $slot_dt = new DateTimeImmutable($slot['date'] . ' ' . $slot['time'], $timezone);
+
+                if ($slot_dt > $now) {
+                    $slots[] = $slot_dt;
+                }
+
+                if (count($slots) >= $limit) {
+                    break;
+                }
+            }
+        }
+
+        return $slots;
     }
 
     /**

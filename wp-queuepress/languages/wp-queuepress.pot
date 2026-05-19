@@ -245,11 +245,35 @@ msgstr ""
 msgid "Queueing..."
 msgstr ""
 
-msgid "Queue"
+msgid "QueuePress"
 msgstr ""
 
-msgid "Queue Last"
+msgid "Queue mode"
 msgstr ""
 
-msgid "Fill Gaps"
+msgid "None"
+msgstr ""
+
+msgid "Add to Queue"
+msgstr ""
+
+msgid "Add First"
+msgstr ""
+
+msgid "Choose how QueuePress should prepare this post."
+msgstr ""
+
+msgid "Calculating preview..."
+msgstr ""
+
+msgid "Queue preview updated."
+msgstr ""
+
+msgid "Estimated slot: "
+msgstr ""
+
+msgid "Use WordPress scheduling to commit."
+msgstr ""
+
+msgid "Estimated first slot: "
 msgstr ""

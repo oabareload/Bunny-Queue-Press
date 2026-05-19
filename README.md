@@ -23,8 +23,10 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 - Pipeline overview page for drafts, scheduled posts, and recently published content
 - Calendar Settings for weekly recurring slot configuration
 - Add to Queue workflow from the Gutenberg editor
+- Add First workflow that rebuilds the entire queue placing the new post first
 - Draft → Schedule workflow without manual publish date management
 - Autosave-safe scheduling behavior during queue assignment
+- Confirmation modal for Add First showing all posts affected before committing
 - Compact editorial pipeline cards with full-card click targets
 - Single-user focused workflow for small editorial teams or solo creators
 - Minimal native admin styling with no JavaScript framework dependency
@@ -33,10 +35,11 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 
 1. Configure reusable weekly publishing slots in **Calendar Settings**.
 2. Draft content in Gutenberg.
-3. Use the **Add to Queue** toggle to assign the next available slot.
+3. Select **Add to Queue** or **Add First** in the QueuePress panel.
 4. Gutenberg updates the post date so the Publish button becomes Schedule.
 5. Autosave is temporarily paused while queue mode is active to keep date changes safe.
-6. Review drafts, scheduled posts, and published content in the **Pipeline** page.
+6. For Add First: click "Review & Confirm Queue Rebuild" in the pre-publish panel to preview all affected posts before saving.
+7. Review drafts, scheduled posts, and published content in the **Pipeline** page.
 
 ## Admin Pages
 
@@ -45,6 +48,22 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 - **Settings** — plugin preferences and queue assignment controls
 
 ## Changelog
+
+### 1.3.0
+
+- **Add First queue rebuild:** when a post is scheduled with Add First mode, the plugin now recalculates and reassigns dates for all existing scheduled posts, not just the new one. The new post takes the first available slot and all other scheduled posts shift forward in their current relative order, with no duplicate slots.
+- **Add First confirmation modal:** clicking Schedule with Add First mode no longer commits immediately. A pre-publish panel appears with a "Review & Confirm Queue Rebuild" button. Clicking it fetches the full proposed rebuild from the server and displays a confirmation modal showing the new post's slot and a table of every affected scheduled post with its current and new publication date. The save only proceeds after the user explicitly confirms.
+- **None mode reverts to Draft correctly:** selecting None now clears the tentative future date from the Gutenberg editor and resets the post status to Draft before removing the queue meta. The post no longer remains in Scheduled/Future state after deselecting a queue mode.
+- **New REST endpoint `GET /add-first-preview`:** returns the complete proposed Add First rebuild plan — new post slot plus all affected posts with formatted date labels — without modifying any data. Used by the confirmation modal.
+- **Gutenberg deprecation warnings resolved:** `PluginDocumentSettingPanel` and `PluginPrePublishPanel` now resolve from `wp.editor` (correct since WP 6.6) with a safe fallback to `wp.editPost` for older installs.
+
+### 1.2.2
+
+- Added deterministic Rebuild Preview: compute-only planner persists a proposed plan to `qps_pending_rebuild` and returns a human-friendly preview in the admin UI.
+- Added Apply Rebuild execution (single-request): an admin action that reads the persisted plan and applies scheduled date updates sequentially using the precomputed dates. The operation is synchronous (single AJAX request), continues on individual failures, collects conflicts, and deletes the pending plan after the attempt.
+- Improved Apply Rebuild UX: kept the preview modal open during apply, added a professional spinner and progress bar, in-modal result summary with conflict list, and retry/close actions. No background workers or batching were introduced in this release.
+- Calendar Settings: removed editorial badges such as "Empty Slot" and "Programmed" — the calendar is now strictly a configuration view showing weekly recurring slots only.
+- Fixed several client-state issues: transactional staged editor for Calendar Settings, robust save behavior, and correct published-post ordering in the Pipeline.
 
 ### 1.2.1
 
@@ -55,33 +74,25 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 - Redesigned compact editorial pipeline cards
 - Fixed admin UI asset routing and page styling
 
-### 1.2.2
-
-- Added deterministic Rebuild Preview: compute-only planner persists a proposed plan to `qps_pending_rebuild` and returns a human-friendly preview in the admin UI.
-- Added Apply Rebuild execution (single-request): an admin action that reads the persisted plan and applies scheduled date updates sequentially using the precomputed dates. The operation is synchronous (single AJAX request), continues on individual failures, collects conflicts, and deletes the pending plan after the attempt.
-- Improved Apply Rebuild UX: kept the preview modal open during apply, added a professional spinner and progress bar, in-modal result summary with conflict list, and retry/close actions. No background workers or batching were introduced in this release.
-- Calendar Settings: removed editorial badges such as "Empty Slot" and "Programmed" — the calendar is now strictly a configuration view showing weekly recurring slots only.
-- Fixed several client-state issues: transactional staged editor for Calendar Settings, robust save behavior, and correct published-post ordering in the Pipeline.
-
 ## Installation
 
 1. Copy the `wp-queuepress` folder into `wp-content/plugins/`.
 2. Activate **Bunny Queue Press** from the WordPress Plugins screen.
 3. Open **Bunny Queue Press > Pipeline** to review editorial status.
 4. Open **Bunny Queue Press > Calendar Settings** to configure weekly recurring slots.
-5. Use the Gutenberg editor Add to Queue toggle to schedule drafts safely.
+5. Use the Gutenberg editor QueuePress panel to schedule drafts safely.
 
 ## File structure
 
 ```text
 Bunny-Queue-Press/
-├── Bunny-Queue-Press.code-workspace
 ├── LICENSE
 ├── README.md
 ├── wp-queuepress/
 │   ├── assets/
 │   │   ├── css/
-│   │   │   └── admin.css
+│   │   │   ├── admin.css
+│   │   │   └── editor.css
 │   │   └── js/
 │   │       ├── calendar.js
 │   │       └── editor.js
@@ -89,6 +100,7 @@ Bunny-Queue-Press/
 │   │   ├── Admin/
 │   │   │   ├── Admin_Menu.php
 │   │   │   ├── Calendar_Page.php
+│   │   │   ├── Pipeline_Page.php
 │   │   │   ├── Settings_Page.php
 │   │   │   └── Slot_Ajax.php
 │   │   ├── Editor/
@@ -99,6 +111,8 @@ Bunny-Queue-Press/
 │   │   ├── Schedule/
 │   │   │   ├── Post_Query.php
 │   │   │   ├── Queue_Assigner.php
+│   │   │   ├── Queue_Commit_Handler.php
+│   │   │   ├── Queue_Rebuilder.php
 │   │   │   ├── Schedule_Calculator.php
 │   │   │   └── Slot_Repository.php
 │   │   └── Settings/
@@ -120,11 +134,6 @@ Bunny-Queue-Press/
 
 ## Notes
 
-- This release focuses on visible admin workflow and UI stabilization.
-- Internal prefixes, namespaces, text domains, and database keys remain unchanged.
-
-Important implementation notes:
-
-- The Apply Rebuild execution implemented in this release is intentionally simple and synchronous. It performs all changes in a single request using the persisted plan in `qps_pending_rebuild` and does NOT implement batching, background workers, resume logic, or retry queues. For large plans this may result in long-running requests or timeouts; plan for a future enhancement that introduces batching and background processing.
-- The frontend shows a simulated progress bar while the single request runs to provide better UX; this progress is visual only and does not reflect server-side per-item progress.
-- On conflicts or partial failures the server returns a list of conflicts which are displayed in the modal; the pending plan is removed after the attempt. If you prefer preserving the pending plan on partial failure, that can be changed in a follow-up.
+- No background workers, cron jobs, or batch processors are used. All queue operations are synchronous and triggered by the user's explicit save action in Gutenberg.
+- The Add First rebuild is compute-only at preview time; changes are only written to the database after the user confirms in the modal.
+- Internal prefixes, namespaces, text domains, and database keys remain unchanged from prior releases.

@@ -1,5 +1,5 @@
 {
-  "translationRevisionDate": "2026-05-10 00:00+0000",
+  "translationRevisionDate": "2026-05-17 00:00+0000",
   "generator": "WP QueuePress starter translation",
   "domain": "messages",
   "locale_data": {
@@ -8,23 +8,41 @@
         "domain": "messages",
         "lang": "es_ES"
       },
-      "Fill Gaps: use earliest free slot": [
-        "Rellenar huecos: usar el primer espacio libre"
+      "Add First": [
+        "Añadir primero"
+      ],
+      "Add to Queue": [
+        "Añadir a la cola"
+      ],
+      "Calculating preview...": [
+        "Calculando vista previa..."
+      ],
+      "Choose how QueuePress should prepare this post.": [
+        "Elige cómo debe preparar QueuePress esta entrada."
+      ],
+      "Estimated first slot: ": [
+        "Primer espacio estimado: "
+      ],
+      "Estimated slot: ": [
+        "Espacio estimado: "
       ],
       "No free publishing slots are currently available.": [
         "No hay espacios de publicación disponibles actualmente."
       ],
-      "Post queued for publishing.": [
-        "Entrada puesta en cola para publicación."
+      "None": [
+        "Ninguno"
       ],
-      "Queue": [
-        "Cola"
+      "Queue mode": [
+        "Modo de cola"
       ],
-      "Queue Last: append to end of queue": [
-        "Poner último en cola: añadir al final de la cola"
+      "Queue preview updated.": [
+        "Vista previa de cola actualizada."
       ],
-      "Queueing...": [
-        "Poniendo en cola..."
+      "QueuePress": [
+        "QueuePress"
+      ],
+      "Use WordPress scheduling to commit.": [
+        "Usa la programación de WordPress para confirmar."
       ]
     }
   }

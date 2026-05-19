@@ -99,6 +99,38 @@ final class Queue_Assigner {
 	}
 
 	/**
+	 * Returns the first queue slot that an Add First rebuild would use.
+	 *
+	 * This is preview-only for Phase 0. It intentionally does not inspect the
+	 * current scheduled posts as occupied, matching the rebuild planner model
+	 * where the queue is recalculated from the first available future slot.
+	 *
+	 * @return DateTimeImmutable|null Null when no configured slot exists.
+	 */
+	public function find_first_queue_slot(): ?DateTimeImmutable {
+		$timezone       = wp_timezone();
+		$now            = new DateTimeImmutable('now', $timezone);
+		$week_start     = $this->get_start_of_week($now);
+		$occupied_posts = array((object) array('post_date' => '1970-01-01 00:00:00', 'ID' => 0));
+
+		for ($week = 0; $week < self::SEARCH_WEEKS; $week++) {
+			$start = $week_start->modify('+' . $week . ' weeks');
+			$end   = $start->modify('+6 days')->setTime(23, 59, 59);
+			$slots = $this->schedule_calculator->get_free_slots($start, $end, $occupied_posts);
+
+			foreach ($slots as $slot) {
+				$slot_time = new DateTimeImmutable($slot['date'] . ' ' . $slot['time'], $timezone);
+
+				if ($slot_time > $now) {
+					return $slot_time;
+				}
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * Returns the start of the week containing the given date.
 	 *
 	 * Respects the week-start preference (Monday or Sunday).

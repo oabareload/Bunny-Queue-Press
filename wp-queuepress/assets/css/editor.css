@@ -1,0 +1,36 @@
+/* QueuePress – Confirmation modal styles */
+.wp-queuepress-confirm-modal .components-modal__content {
+	min-width: 340px;
+}
+
+.wp-queuepress-confirm-modal__body {
+	margin-bottom: 1.5rem;
+}
+
+.wp-queuepress-confirm-modal__body p {
+	margin: 0 0 0.5rem;
+	font-size: 0.9375rem;
+}
+
+.wp-queuepress-confirm-modal__slot {
+	font-size: 1.05rem !important;
+	color: #1e1e1e;
+}
+
+.wp-queuepress-confirm-modal__tz {
+	color: #757575;
+	font-size: 0.875rem !important;
+}
+
+.wp-queuepress-confirm-modal__tz code {
+	background: #f0f0f1;
+	padding: 1px 5px;
+	border-radius: 3px;
+	font-family: monospace;
+}
+
+.wp-queuepress-confirm-modal__actions {
+	display: flex;
+	gap: 0.75rem;
+	justify-content: flex-end;
+}
