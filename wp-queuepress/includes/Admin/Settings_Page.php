@@ -142,7 +142,8 @@ final class Settings_Page {
 		$settings = $this->preferences->get();
 		?>
 		<div class="wrap qps-wrap">
-				<h1><?php echo esc_html__('Bunny Queue Press Settings', 'wp-queuepress'); ?></h1>
+			<?php Admin_Header::render( 'qps-settings' ); ?>
+			<div class="qps-page-content">
 
 			<?php if (isset($_GET['settings-updated'])) : ?>
 				<div class="notice notice-success is-dismissible"><p><?php echo esc_html__('Settings saved.', 'wp-queuepress'); ?></p></div>
@@ -221,6 +222,7 @@ final class Settings_Page {
 					</form>
 				</section>
 			</div>
+			</div><!-- .qps-page-content -->
 		</div>
 		<?php
 	}

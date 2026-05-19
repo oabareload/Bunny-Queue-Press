@@ -87,7 +87,8 @@ final class Calendar_Page {
 	$days         = $this->build_week_days($week_start);
 	?>
 	<div class="wrap qps-wrap" data-wp-queuepress-week="<?php echo esc_attr($week_start->format('Y-m-d')); ?>">
-		<h1><?php echo esc_html__('Calendar Settings', 'wp-queuepress'); ?></h1>
+		<?php Admin_Header::render( 'qps-calendar' ); ?>
+		<div class="qps-page-content">
 		<p class="description">
 			<?php echo esc_html__('Configure recurring weekly publishing slots and review your schedule template.', 'wp-queuepress'); ?>
 		</p>
@@ -128,6 +129,7 @@ final class Calendar_Page {
 			</section>
 			<?php endforeach; ?>
 		</div>
+		</div><!-- .qps-page-content -->
 	</div>
 	<?php
 	}

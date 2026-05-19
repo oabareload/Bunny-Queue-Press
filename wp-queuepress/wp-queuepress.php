@@ -3,7 +3,7 @@
  * Plugin Name: Bunny Queue Press
  * Plugin URI: https://bunnychase.net/bunny-queue-press/
  * Description: A lightweight editorial scheduling plugin for WordPress that allows creators and publishers to configure reusable weekly publishing slots, visualize scheduled and published content in a clean calendar interface, and identify free publishing spaces quickly.
- * Version: 1.3.0
+ * Version: 1.4.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: BunnyChase
@@ -21,7 +21,7 @@ if (! defined('ABSPATH')) {
 	exit;
 }
 
-define('WP_QUEUEPRESS_VERSION', '1.3.0');
+define('WP_QUEUEPRESS_VERSION', '1.4.0');
 define('WP_QUEUEPRESS_PLUGIN_FILE', __FILE__);
 define('WP_QUEUEPRESS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WP_QUEUEPRESS_PLUGIN_URL', plugin_dir_url(__FILE__));

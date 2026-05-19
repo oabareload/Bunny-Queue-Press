@@ -49,6 +49,13 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 
 ## Changelog
 
+### 1.4.0
+
+- **Shared admin header:** introduced `Admin_Header`, a reusable PHP helper that renders a consistent header block — plugin logo, name, and version badge — across all admin pages without duplicating markup.
+- **Persistent tab navigation:** all admin pages (Pipeline, Calendar Settings, Settings) now share a horizontal tab bar rendered by `Admin_Header`. The active tab is detected by the page slug passed at render time; no `$_GET` parsing is required.
+- **Modernized admin UI styles:** added a dedicated CSS section in `admin.css` using scoped `--qps-*` custom properties. Tab underline accent color is `#6c47ff`. Includes soft borders, consistent spacing, and a version pill badge in the header.
+- **No logic or routing changes:** all existing callbacks, REST endpoints, AJAX handlers, and WordPress hooks remain untouched. Only layout and presentation were modified.
+
 ### 1.3.0
 
 - **Add First queue rebuild:** when a post is scheduled with Add First mode, the plugin now recalculates and reassigns dates for all existing scheduled posts, not just the new one. The new post takes the first available slot and all other scheduled posts shift forward in their current relative order, with no duplicate slots.
@@ -98,6 +105,7 @@ Bunny-Queue-Press/
 │   │       └── editor.js
 │   ├── includes/
 │   │   ├── Admin/
+│   │   │   ├── Admin_Header.php
 │   │   │   ├── Admin_Menu.php
 │   │   │   ├── Calendar_Page.php
 │   │   │   ├── Pipeline_Page.php
