@@ -124,6 +124,14 @@ final class Admin_Menu {
 			return;
 		}
 
+		// Shared Bunny Admin UI base (header, tabs, nav).
+		wp_enqueue_style(
+			'bunny-admin',
+			WP_QUEUEPRESS_PLUGIN_URL . 'assets/css/bunny-admin.css',
+			array(),
+			WP_QUEUEPRESS_VERSION
+		);
+
 		// Keep the stylesheet scoped to the plugin's admin pages.
 		wp_enqueue_style(
 			'wp-queuepress-admin',

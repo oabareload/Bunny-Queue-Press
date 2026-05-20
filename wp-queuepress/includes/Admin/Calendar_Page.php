@@ -86,9 +86,9 @@ final class Calendar_Page {
 	$availability = $this->schedule_calculator->get_week_availability($week_start, $week_end, array());
 	$days         = $this->build_week_days($week_start);
 	?>
-	<div class="wrap qps-wrap" data-wp-queuepress-week="<?php echo esc_attr($week_start->format('Y-m-d')); ?>">
+	<div class="wrap bunny-wrap" data-wp-queuepress-week="<?php echo esc_attr($week_start->format('Y-m-d')); ?>">
 		<?php Admin_Header::render( 'qps-calendar' ); ?>
-		<div class="qps-page-content">
+		<div class="bunny-page-content">
 		<p class="description">
 			<?php echo esc_html__('Configure recurring weekly publishing slots and review your schedule template.', 'wp-queuepress'); ?>
 		</p>

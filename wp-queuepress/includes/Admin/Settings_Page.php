@@ -141,9 +141,9 @@ final class Settings_Page {
 
 		$settings = $this->preferences->get();
 		?>
-		<div class="wrap qps-wrap">
+		<div class="wrap bunny-wrap">
 			<?php Admin_Header::render( 'qps-settings' ); ?>
-			<div class="qps-page-content">
+			<div class="bunny-page-content">
 
 			<?php if (isset($_GET['settings-updated'])) : ?>
 				<div class="notice notice-success is-dismissible"><p><?php echo esc_html__('Settings saved.', 'wp-queuepress'); ?></p></div>

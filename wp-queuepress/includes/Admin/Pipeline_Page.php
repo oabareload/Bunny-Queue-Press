@@ -108,9 +108,9 @@ final class Pipeline_Page {
 		$scheduled_groups = $this->group_posts_by_day($scheduled_posts, $timezone);
 		$published_groups = $this->group_posts_by_day($published_posts, $timezone);
 		?>
-		<div class="wrap qps-wrap">
+		<div class="wrap bunny-wrap">
 			<?php Admin_Header::render( 'qps-pipeline' ); ?>
-			<div class="qps-page-content">
+			<div class="bunny-page-content">
 			<p class="description">
 				<?php echo esc_html__('A lightweight editorial overview of drafts, scheduled posts, and recently published content.', 'wp-queuepress'); ?>
 			</p>

@@ -49,6 +49,16 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 
 ## Changelog
 
+### 1.4.1
+
+- **Bunny Admin UI system — homologation:** migrated all shared admin UI classes from the `qps-*` prefix to the unified `bunny-*` system. Header, nav, tabs, wrappers, badges, and spacing now use `.bunny-*` classes and `--bunny-*` CSS custom properties consistent across all Bunny plugins.
+- **New `bunny-admin.css`:** introduced a dedicated, plugin-agnostic stylesheet containing only shared admin chrome (sticky header, tab navigation, version badge, page-content wrapper, responsive breakpoints). Plugin-specific styles remain in `admin.css`.
+- **Sticky admin header:** the shared header is now `position: sticky; top: 32px` so it remains visible while scrolling long pages like Calendar Settings.
+- **Page subtitle:** `Admin_Header::render()` now accepts an optional `$page_label` argument and renders a `.bunny-page-subtitle` below the plugin name, showing the current section name.
+- **Shadow and transition tokens:** `--bunny-shadow`, `--bunny-shadow-hover`, and `--bunny-transition` added to the shared variable set, sourced from Bunny Affiliate Manager's visual system.
+- **`bunny-admin.css` enqueued separately:** declared as a WordPress style dependency before `admin.css` to allow future plugins to load the base independently.
+- **No functional changes:** all plugin logic, routing, REST endpoints, AJAX handlers, and WordPress hooks are unchanged.
+
 ### 1.4.0
 
 - **Shared admin header:** introduced `Admin_Header`, a reusable PHP helper that renders a consistent header block — plugin logo, name, and version badge — across all admin pages without duplicating markup.
@@ -99,6 +109,7 @@ Bunny-Queue-Press/
 │   ├── assets/
 │   │   ├── css/
 │   │   │   ├── admin.css
+│   │   │   ├── bunny-admin.css
 │   │   │   └── editor.css
 │   │   └── js/
 │   │       ├── calendar.js
