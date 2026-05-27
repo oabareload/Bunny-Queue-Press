@@ -84,6 +84,11 @@ final class Queue_Assigner {
 			$start = $week_start->modify('+' . $week . ' weeks');
 			$end   = $start->modify('+6 days')->setTime(23, 59, 59);
 			$posts = $this->get_occupying_posts($start, $end, $post_id);
+
+			if (empty($posts)) {
+				$posts = array((object) array('post_date' => '1970-01-01 00:00:00', 'ID' => 0));
+			}
+
 			$slots = $this->schedule_calculator->get_free_slots($start, $end, $posts);
 
 			foreach ($slots as $slot) {

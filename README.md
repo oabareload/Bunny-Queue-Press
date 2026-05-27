@@ -49,6 +49,10 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 
 ## Changelog
 
+### 1.4.2
+
+- **Fixed self-collision scheduling bug:** added a sentinel post guard to prevent `Schedule_Calculator` from executing its database fallback query when scheduling a post in an otherwise empty week. This ensures the post is correctly scheduled at its previewed slot (e.g., 10:00 AM) rather than shifted to subsequent slots (e.g., 8:00 PM) due to colliding with its own newly-saved database status.
+
 ### 1.4.1
 
 - **Bunny Admin UI system — homologation:** migrated all shared admin UI classes from the `qps-*` prefix to the unified `bunny-*` system. Header, nav, tabs, wrappers, badges, and spacing now use `.bunny-*` classes and `--bunny-*` CSS custom properties consistent across all Bunny plugins.
