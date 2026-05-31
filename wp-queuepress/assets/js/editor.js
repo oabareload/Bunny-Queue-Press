@@ -97,6 +97,34 @@
 			return function () { unlockAutosaving(LOCK_KEY); };
 		}, [mode]);
 
+		// Automatically recalculate slot when opening a draft with a pre-existing queue mode
+		useEffect(function () {
+			if (postId && 'none' !== mode && null === slotInfo && !isLoading) {
+				setIsLoading(true);
+				apiFetch({
+					path: '/wp-queuepress/v1/posts/' + postId + '/next-slot?mode=' + mode,
+					method: 'GET'
+				}).then(function (response) {
+					setSlotInfo({ date: response.date, time: response.time, iso: response.iso });
+					editPost({ date: response.iso });
+					noticesDispatch.createSuccessNotice(
+						__('Queue preview loaded.', 'wp-queuepress'),
+						{ type: 'snackbar' }
+					);
+				}).catch(function (error) {
+					setMode('none');
+					setQueueMeta('none');
+					setSlotInfo(null);
+					var msg = error.message || __('No free publishing slots are currently available.', 'wp-queuepress');
+					setErrorMessage(msg);
+					clearQueueMode(postId);
+					noticesDispatch.createErrorNotice(msg, { type: 'snackbar' });
+				}).finally(function () {
+					setIsLoading(false);
+				});
+			}
+		}, [postId, mode, slotInfo, isLoading]);
+
 		// ── Helpers ───────────────────────────────────────────────────────────────
 
 		function formatSlotLabel(date, time) {

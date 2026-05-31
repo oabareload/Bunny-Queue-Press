@@ -83,7 +83,20 @@ final class Queue_Commit_Handler {
 	 * @return void
 	 */
 	public function commit_queue_mode(string $new_status, string $old_status, \WP_Post $post): void {
-		if ($this->is_applying || 'future' === $old_status || 'future' !== $new_status) {
+		if ($this->is_applying) {
+			return;
+		}
+
+		// Handle future -> draft transition: perform a controlled cleanup to prevent obsolete state persistence.
+		if ('future' === $old_status) {
+			if ('draft' === $new_status) {
+				delete_post_meta((int) $post->ID, self::META_KEY);
+				clean_post_cache((int) $post->ID);
+			}
+			return;
+		}
+
+		if ('future' !== $new_status) {
 			return;
 		}
 
@@ -130,6 +143,7 @@ final class Queue_Commit_Handler {
 			return;
 		}
 
+		clean_post_cache($post_id);
 		$post = get_post($post_id);
 		if (! $post instanceof \WP_Post) {
 			return;

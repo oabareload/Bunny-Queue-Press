@@ -49,6 +49,13 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 
 ## Changelog
 
+### 1.4.3
+
+- **Fixed queue status transition and Gutenberg state sync issues:**
+  - Added controlled metadata cleanup on the `future` → `draft` status transition to remove `_wp_queuepress_queue_mode` and clean post object cache immediately.
+  - Resolved post-requeuing inconsistencies by executing `clean_post_cache()` before fetching posts in the enqueuing pipeline (`Queue_Commit_Handler::commit_add_to_queue`).
+  - Implemented automatic initial slot computation in the Gutenberg component (`editor.js`) when mounting a draft that has an active pre-existing queue mode, avoiding date mismatch when scheduling.
+
 ### 1.4.2
 
 - **Fixed self-collision scheduling bug:** added a sentinel post guard to prevent `Schedule_Calculator` from executing its database fallback query when scheduling a post in an otherwise empty week. This ensures the post is correctly scheduled at its previewed slot (e.g., 10:00 AM) rather than shifted to subsequent slots (e.g., 8:00 PM) due to colliding with its own newly-saved database status.
