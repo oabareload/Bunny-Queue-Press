@@ -48,6 +48,17 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 - **Settings** — plugin preferences and queue assignment controls
 
 ## Changelog
+### 2.0.0
+
+- **Major release — Full Buffer integration:**
+  - Added complete Buffer integration including authentication, per-channel configuration, and publishing pipeline.
+  - Implemented `Buffer_Client` transport with safe GraphQL JSON encoding and debug logging stored in WordPress option `_queuepress_buffer_debug_log`.
+  - Added `Publisher_Commons`, `Mutation_Commons`, and service-specific publishers (`Instagram_Publisher`, `Twitter_Publisher`, `Threads_Publisher`) to centralize caption, asset, hashtag, and mutation construction logic.
+  - Implemented `social_post` and `card_link` post styles with correct permalink/hashtag handling and per-service character limits.
+  - Automatic thread splitting for long content with image distribution across thread elements and NSFW handling (Threads fall back to `card_link`).
+  - AJAX orchestration updated (`Buffer_Ajax`) to publish to enabled Buffer channels and persist per-channel records.
+  - Added debug logging utilities (`Buffer_Debug`) to capture request/response and aid troubleshooting.
+  - Many internal improvements: safer GraphQL escaping, block-aware caption extraction using `parse_blocks()`, and consolidated publisher behavior.
 
 ### 1.4.3
 
@@ -147,6 +158,16 @@ Bunny-Queue-Press/
 │   │   │   └── Slot_Repository.php
 │   │   └── Settings/
 │   │       └── Preferences.php
+│   │   └── Buffer/
+│   │       ├── Buffer_Ajax.php
+│   │       ├── Buffer_Client.php
+│   │       ├── Buffer_Debug.php
+│   │       ├── Channel_Config.php
+│   │       ├── Instagram_Publisher.php
+│   │       ├── Mutation_Commons.php
+│   │       ├── Publisher_Commons.php
+│   │       ├── Threads_Publisher.php
+│   │       └── Twitter_Publisher.php
 │   ├── languages/
 │   │   ├── wp-queuepress-es_ES-wp-queuepress-editor.json
 │   │   ├── wp-queuepress-es_ES.mo

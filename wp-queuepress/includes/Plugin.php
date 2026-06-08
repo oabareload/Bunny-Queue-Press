@@ -10,10 +10,12 @@ declare(strict_types=1);
 namespace QueuePostScheduler;
 
 use QueuePostScheduler\Admin\Admin_Menu;
+use QueuePostScheduler\Admin\Buffer_Page;
 use QueuePostScheduler\Admin\Calendar_Page;
 use QueuePostScheduler\Admin\Pipeline_Page;
 use QueuePostScheduler\Admin\Slot_Ajax;
 use QueuePostScheduler\Admin\Settings_Page;
+use QueuePostScheduler\Buffer\Buffer_Ajax;
 use QueuePostScheduler\Editor\Editor_Assets;
 use QueuePostScheduler\Schedule\Post_Query;
 use QueuePostScheduler\Rest\Queue_Controller;
@@ -74,7 +76,9 @@ final class Plugin {
 		$settings_page = new Settings_Page($slot_repository, $preferences);
 		$calendar_page = new Calendar_Page($slot_repository, $schedule_calculator, $preferences);
 		$pipeline_page = new Pipeline_Page($post_query, $preferences);
-		$admin_menu    = new Admin_Menu($settings_page, $calendar_page, $pipeline_page);
+		$buffer_page   = new Buffer_Page();
+		$buffer_ajax   = new Buffer_Ajax();
+		$admin_menu    = new Admin_Menu($settings_page, $calendar_page, $pipeline_page, $buffer_page);
 		$slot_ajax     = new Slot_Ajax($slot_repository, $post_query, $schedule_calculator, $preferences);
 		$editor_assets = new Editor_Assets();
 		$queue_api     = new Queue_Controller($queue_assigner, $queue_rebuilder);
@@ -82,6 +86,8 @@ final class Plugin {
 
 		$settings_page->register();
 		$calendar_page->register();
+		$buffer_page->register();
+		$buffer_ajax->register();
 		$admin_menu->register();
 		$slot_ajax->register();
 		$editor_assets->register();

@@ -11,6 +11,7 @@ namespace QueuePostScheduler\Admin;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use QueuePostScheduler\Buffer\Buffer_Ajax;
 use QueuePostScheduler\Schedule\Post_Query;
 use QueuePostScheduler\Settings\Preferences;
 
@@ -226,6 +227,10 @@ final class Pipeline_Page {
 	/**
 	 * Renders a set of compact horizontal post cards.
 	 *
+	 * Each card has an action menu (⋮) with a "Send to Buffer" option.
+	 * The ⋮ button is always active — sending to Buffer again simply
+	 * overwrites the previous record for that channel.
+	 *
 	 * @param array<int,\WP_Post> $posts Posts to render.
 	 * @param DateTimeZone        $timezone Site timezone.
 	 * @param bool                $show_time Whether to show post time.
@@ -233,38 +238,96 @@ final class Pipeline_Page {
 	 */
 	private function render_post_cards(array $posts, DateTimeZone $timezone, bool $show_time): void {
 		foreach ($posts as $post) {
-			$post_time = new DateTimeImmutable($post->post_date, $timezone);
-			$edit_url  = get_edit_post_link($post->ID);
-			$title     = get_the_title($post) ?: __('(no title)', 'wp-queuepress');
-			$status    = $this->get_post_status_label($post->post_status);
-			$thumbnail = get_the_post_thumbnail_url($post, array(120, 120));
+			$post_time    = new DateTimeImmutable($post->post_date, $timezone);
+			$edit_url     = get_edit_post_link($post->ID);
+			$title        = get_the_title($post) ?: __('(no title)', 'wp-queuepress');
+			$status       = $this->get_post_status_label($post->post_status);
+			$thumbnail    = get_the_post_thumbnail_url($post, array(120, 120));
+			$buffer_entry = $this->get_buffer_channel_entry($post->ID);
 			?>
 			<li class="qps-card">
-				<?php if ($edit_url) : ?>
-					<a class="qps-card-link" href="<?php echo esc_url($edit_url); ?>">
-				<?php endif; ?>
-				<?php if ($thumbnail) : ?>
-					<div class="qps-card-image">
-						<img src="<?php echo esc_url($thumbnail); ?>" alt="<?php echo esc_attr($title); ?>" />
-					</div>
-				<?php endif; ?>
-				<div class="qps-card-body">
-					<div class="qps-card-title">
-						<span><?php echo esc_html($title); ?></span>
-					</div>
-					<div class="qps-card-meta">
-						<?php if ($show_time) : ?>
-							<time><?php echo esc_html(wp_date($this->preferences->get_time_format(), $post_time->getTimestamp())); ?></time>
-						<?php endif; ?>
-						<span class="qps-badge <?php echo esc_attr($status['class']); ?>"><?php echo esc_html($status['label']); ?></span>
-					</div>
-				</div>
-				<?php if ($edit_url) : ?>
-					</a>
-				<?php endif; ?>
+				<div class="qps-card-inner">
+					<?php if ($thumbnail) : ?>
+						<div class="qps-card-image">
+							<img src="<?php echo esc_url($thumbnail); ?>" alt="<?php echo esc_attr($title); ?>" />
+						</div>
+					<?php endif; ?>
+					<div class="qps-card-body">
+						<div class="qps-card-header-row">
+							<?php if ($edit_url) : ?>
+								<a class="qps-card-title-link" href="<?php echo esc_url($edit_url); ?>">
+									<?php echo esc_html($title); ?>
+								</a>
+							<?php else : ?>
+								<span class="qps-card-title-link"><?php echo esc_html($title); ?></span>
+							<?php endif; ?>
+							<div class="qps-card-actions">
+								<?php if ($buffer_entry) : ?>
+									<span class="qps-buffer-indicator" title="<?php echo esc_attr(
+										sprintf(
+											/* translators: %s: sent datetime */
+											__('Sent to Buffer on %s', 'wp-queuepress'),
+											$buffer_entry['sent_at']
+										)
+									); ?>">&#10003;</span>
+								<?php endif; ?>
+								<div class="qps-action-menu">
+									<button
+										type="button"
+										class="qps-action-menu-toggle"
+										aria-label="<?php esc_attr_e('Post actions', 'wp-queuepress'); ?>"
+										aria-expanded="false"
+									>&#8942;</button>
+									<ul class="qps-action-menu-list" role="menu" hidden>
+										<li role="none">
+											<button
+												type="button"
+												role="menuitem"
+												class="qps-send-to-buffer"
+												data-post-id="<?php echo esc_attr((string) $post->ID); ?>"
+												data-nonce="<?php echo esc_attr(wp_create_nonce(Buffer_Ajax::nonce_action($post->ID))); ?>"
+											><?php esc_html_e('Send to Buffer', 'wp-queuepress'); ?></button>
+										</li>
+									</ul>
+								</div><!-- .qps-action-menu -->
+							</div><!-- .qps-card-actions -->
+						</div><!-- .qps-card-header-row -->
+						<div class="qps-card-meta">
+							<?php if ($show_time) : ?>
+								<time><?php echo esc_html(wp_date($this->preferences->get_time_format(), $post_time->getTimestamp())); ?></time>
+							<?php endif; ?>
+							<span class="qps-badge <?php echo esc_attr($status['class']); ?>"><?php echo esc_html($status['label']); ?></span>
+						</div><!-- .qps-card-meta -->
+					</div><!-- .qps-card-body -->
+				</div><!-- .qps-card-inner -->
+				<!-- Inline feedback (populated by JS) -->
+				<div class="qps-card-feedback" aria-live="polite"></div>
 			</li>
 			<?php
 		}
+	}
+
+	/**
+	 * Returns the most recent Buffer channel entry for a post, or null.
+	 *
+	 * Reads _queuepress_buffer_channels and returns the first entry found.
+	 * In Sprint 3.0 only one channel (Instagram) is used. In Sprint 3.1+
+	 * this can be extended to return entries per channel_id.
+	 *
+	 * @param int $post_id WordPress post ID.
+	 * @return array<string, mixed>|null
+	 */
+	private function get_buffer_channel_entry(int $post_id): ?array {
+		$channels = get_post_meta($post_id, Buffer_Ajax::META_KEY, true);
+
+		if (! is_array($channels) || empty($channels)) {
+			return null;
+		}
+
+		// Return the first entry — keyed by channel_id.
+		$entry = reset($channels);
+
+		return is_array($entry) ? $entry : null;
 	}
 
 	/**

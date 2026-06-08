@@ -30,6 +30,7 @@ final class Admin_Header {
 		'qps-pipeline' => 'Pipeline',
 		'qps-calendar' => 'Calendar Settings',
 		'qps-settings' => 'Settings',
+		'qps-buffer'   => 'Buffer',
 	);
 
 	/**

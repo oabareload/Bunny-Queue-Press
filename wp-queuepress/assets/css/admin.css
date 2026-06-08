@@ -185,9 +185,10 @@
 	border: 1px solid #dcdcde;
 	border-radius: 4px;
 	margin: 0 0 10px;
-	overflow: hidden;
-	height: 84px;
+	/* Allow dropdown menus to overflow the card */
+	overflow: visible;
 	min-height: 84px;
+	height: auto;
 }
 
 .qps-card-link {
@@ -578,4 +579,628 @@
 /* =============================================================
    Header, tabs, nav — see bunny-admin.css (shared Bunny UI base)
    ============================================================= */
+
+#wpfooter {
+	position: relative !important;
+	bottom: auto !important;
+}
+
+/* =============================================================
+   Buffer — Connection Card
+   ============================================================= */
+
+.qps-connection-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+	margin-bottom: 24px;
+	overflow: hidden;
+}
+
+.qps-connection-card-header {
+	align-items: center;
+	background: #f6f7f7;
+	border-bottom: 1px solid #e0e0e0;
+	display: flex;
+	gap: 16px;
+	justify-content: space-between;
+	padding: 12px 20px;
+}
+
+.qps-connection-status {
+	align-items: center;
+	display: flex;
+	gap: 8px;
+}
+
+.qps-status-dot {
+	border-radius: 50%;
+	display: inline-block;
+	flex-shrink: 0;
+	height: 10px;
+	width: 10px;
+}
+
+.qps-status--connected    .qps-status-dot { background: #00a32a; }
+.qps-status--disconnected .qps-status-dot { background: #d63638; }
+
+.qps-status--connected    .qps-status-label { color: #1d2327; font-weight: 600; }
+.qps-status--disconnected .qps-status-label { color: #646970; }
+
+.qps-connection-sync {
+	color: #8c8f94;
+	font-size: 12px;
+}
+
+.qps-connection-card-body {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 20px;
+}
+
+/* Token row */
+
+.qps-token-row {
+	align-items: center;
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.qps-token-label {
+	color: #1d2327;
+	font-size: 13px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.qps-token-input {
+	flex: 1;
+	max-width: 380px;
+	min-width: 180px;
+}
+
+/* Connection summary */
+
+.qps-connection-summary {
+	align-items: center;
+	display: flex;
+	gap: 20px;
+	flex-wrap: wrap;
+}
+
+.qps-summary-item {
+	align-items: center;
+	display: inline-flex;
+	gap: 6px;
+}
+
+.qps-summary-label {
+	color: #8c8f94;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.qps-summary-value {
+	color: #1d2327;
+	font-size: 13px;
+}
+
+.qps-summary-networks {
+	color: #646970;
+	font-size: 12px;
+}
+
+/* Action buttons */
+
+.qps-connection-actions {
+	align-items: center;
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+/* =============================================================
+   Buffer — Profiles Layout (sidebar + panels)
+   ============================================================= */
+
+.qps-profiles-layout {
+	display: grid;
+	grid-template-columns: 220px 1fr;
+	gap: 0;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	overflow: hidden;
+	min-height: 420px;
+}
+
+/* Sidebar */
+
+.qps-profiles-sidebar {
+	background: #f6f7f7;
+	border-right: 1px solid #e0e0e0;
+	display: flex;
+	flex-direction: column;
+	max-height: 640px;
+	overflow-y: auto;
+	padding: 8px 0;
+}
+
+.qps-sidebar-item {
+	align-items: center;
+	background: transparent;
+	border: none;
+	border-left: 3px solid transparent;
+	cursor: pointer;
+	display: flex;
+	gap: 10px;
+	padding: 10px 14px;
+	text-align: left;
+	transition: background 0.1s, border-color 0.1s;
+	width: 100%;
+}
+
+.qps-sidebar-item:hover {
+	background: #eee;
+}
+
+.qps-sidebar-item--active {
+	background: #fff;
+	border-left-color: #6c47ff;
+}
+
+.qps-sidebar-avatar {
+	border-radius: 50%;
+	flex-shrink: 0;
+	height: 28px;
+	object-fit: cover;
+	width: 28px;
+}
+
+.qps-sidebar-avatar--placeholder {
+	background: #dcdcde;
+	display: inline-block;
+}
+
+.qps-sidebar-info {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.qps-sidebar-name {
+	color: #1d2327;
+	font-size: 13px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.qps-sidebar-service {
+	color: #8c8f94;
+	font-size: 11px;
+}
+
+.qps-sidebar-status {
+	border-radius: 50%;
+	flex-shrink: 0;
+	height: 8px;
+	width: 8px;
+}
+
+.qps-sidebar-status--on  { background: #00a32a; }
+.qps-sidebar-status--off { background: #c3c4c7; }
+
+/* Panels */
+
+.qps-profiles-panels {
+	background: #fff;
+	min-width: 0;
+}
+
+.qps-channel-panel {
+	display: none;
+	padding: 24px;
+}
+
+.qps-channel-panel--active {
+	display: block;
+}
+
+/* Panel meta */
+
+.qps-panel-meta {
+	align-items: center;
+	border-bottom: 1px solid #f0f0f1;
+	display: flex;
+	gap: 14px;
+	margin-bottom: 20px;
+	padding-bottom: 16px;
+}
+
+.qps-panel-avatar {
+	border-radius: 50%;
+	flex-shrink: 0;
+	object-fit: cover;
+}
+
+.qps-panel-meta-info {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.qps-panel-name {
+	color: #1d2327;
+	font-size: 15px;
+}
+
+.qps-panel-meta-row {
+	align-items: center;
+	display: flex;
+	gap: 8px;
+}
+
+.qps-panel-channel-id {
+	color: #646970;
+	font-size: 11px;
+}
+
+/* Autosave status */
+
+.qps-autosave-status {
+	color: #646970;
+	font-size: 12px;
+	margin-left: auto;
+	transition: opacity 0.3s;
+}
+
+.qps-autosave-status--saving { color: #646970; }
+.qps-autosave-status--saved  { color: #00a32a; }
+.qps-autosave-status--error  { color: #d63638; }
+.qps-autosave-status--session { color: #d63638; font-weight: 600; }
+
+/* =============================================================
+   Buffer — Channel Form
+   ============================================================= */
+
+/* Enabled toggle */
+
+.qps-enabled-row {
+	margin-bottom: 20px;
+}
+
+.qps-toggle {
+	align-items: center;
+	cursor: pointer;
+	display: inline-flex;
+	gap: 10px;
+}
+
+.qps-toggle input[type="checkbox"] {
+	clip: rect(0 0 0 0);
+	clip-path: inset(50%);
+	height: 1px;
+	overflow: hidden;
+	position: absolute;
+	white-space: nowrap;
+	width: 1px;
+}
+
+.qps-toggle-track {
+	background: #c3c4c7;
+	border-radius: 10px;
+	display: inline-block;
+	flex-shrink: 0;
+	height: 20px;
+	position: relative;
+	transition: background 0.15s;
+	width: 36px;
+}
+
+.qps-toggle input:checked ~ .qps-toggle-track {
+	background: #6c47ff;
+}
+
+.qps-toggle-thumb {
+	background: #fff;
+	border-radius: 50%;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+	height: 16px;
+	left: 2px;
+	position: absolute;
+	top: 2px;
+	transition: left 0.15s;
+	width: 16px;
+}
+
+.qps-toggle input:checked ~ .qps-toggle-track .qps-toggle-thumb {
+	left: 18px;
+}
+
+.qps-toggle-label {
+	color: #1d2327;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+/* Config fields grid */
+
+.qps-channel-fields {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+	gap: 16px;
+	margin-bottom: 20px;
+}
+
+.qps-config-field {
+	display: grid;
+	gap: 5px;
+}
+
+.qps-config-field label {
+	color: #50575e;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
+.qps-config-field select {
+	max-width: 100%;
+	width: 100%;
+}
+
+.qps-config-field input[type="checkbox"] {
+	margin-top: 4px;
+}
+
+/* Field help text — shown below the input, always visible */
+.qps-field-description {
+	color: #8c8f94;
+	font-size: 12px;
+	font-style: italic;
+	margin: 4px 0 0;
+}
+
+/* Option description — shown below a select, reflects the active option */
+.qps-field-option-description {
+	background: #f6f7f7;
+	border-left: 3px solid #c3c4c7;
+	color: #646970;
+	font-size: 12px;
+	margin: 6px 0 0;
+	padding: 6px 10px;
+}
+
+/* Platform limits info block */
+
+.qps-channel-limits {
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 3px;
+	margin-bottom: 20px;
+	padding: 10px 14px;
+}
+
+.qps-limits-label {
+	color: #50575e;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	margin: 0 0 6px;
+	text-transform: uppercase;
+}
+
+.qps-limits-list {
+	color: #646970;
+	font-size: 12px;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.qps-limits-list li {
+	display: inline-block;
+	margin-right: 16px;
+}
+
+.qps-limit-label {
+	color: #50575e;
+	font-weight: 600;
+}
+
+.qps-limit-value {
+	color: #1d2327;
+	margin-left: 3px;
+}
+
+/* JS-off fallback submit — hidden by JS when autosave is active */
+
+.qps-form-fallback {
+	padding-top: 10px;
+}
+
+/* Placeholder for future Draft · Queue · Sent section */
+
+.qps-publications-placeholder {
+	display: none; /* Reserve space without affecting current layout */
+}
+
+/* =============================================================
+   Pipeline — Card action menu
+   ============================================================= */
+
+/* The <li> itself: column so feedback sits below the card inner */
+.qps-card {
+	display: flex;
+	flex-direction: column;
+	position: relative;
+}
+
+/* Inner row: thumbnail + body side by side */
+.qps-card-inner {
+	align-items: stretch;
+	display: flex;
+	flex: 1;
+	width: 100%;
+}
+
+/* Body: column, takes remaining width */
+.qps-card-body {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+}
+
+/* Header row: title link + actions on the same line */
+.qps-card-header-row {
+	align-items: center; /* vertically center title and actions */
+	display: flex;
+	justify-content: space-between;
+	gap: 6px;
+}
+
+/* Title link: grows, truncates long titles */
+.qps-card-title-link {
+	color: #1d2327;
+	flex: 1;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.4;
+	min-width: 0;
+	overflow: hidden;
+	text-decoration: none;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+a.qps-card-title-link:hover {
+	color: #2271b1;
+	text-decoration: underline;
+}
+
+/* Actions: indicator + ⋮, aligned to the first line of title */
+.qps-card-actions {
+	align-items: center;
+	display: flex;
+	flex-shrink: 0;
+	gap: 4px;
+	margin-top: 1px; /* optical alignment with title cap-height */
+}
+
+.qps-buffer-indicator {
+	color: #00a32a;
+	cursor: default;
+	font-size: 12px;
+	line-height: 1;
+}
+
+/* ⋮ toggle button */
+.qps-action-menu {
+	position: relative;
+}
+
+.qps-action-menu-toggle {
+	align-items: center;
+	background: transparent;
+	border: none;
+	border-radius: 3px;
+	color: #8c8f94;
+	cursor: pointer;
+	display: flex;
+	font-size: 16px;
+	height: 28px;
+	justify-content: center;
+	line-height: 1;
+	padding: 4px 6px;
+	transition: background 0.1s, color 0.1s;
+	width: 32px;
+}
+
+.qps-action-menu-toggle:hover {
+	background: #f0f0f0;
+	color: #1d2327;
+}
+
+/* Dropdown list */
+.qps-action-menu-list {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+	list-style: none;
+	margin: 0;
+	min-width: 160px;
+	padding: 4px 0;
+	position: absolute;
+	right: 0;
+	top: calc(100% + 4px);
+	z-index: 100;
+}
+
+.qps-action-menu-list[hidden] {
+	display: none;
+}
+
+.qps-action-menu-list li {
+	margin: 0;
+	padding: 0;
+}
+
+.qps-action-menu-list button {
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	display: block;
+	font-size: 13px;
+	padding: 7px 14px;
+	text-align: left;
+	transition: background 0.1s;
+	width: 100%;
+}
+
+.qps-action-menu-list button:hover {
+	background: #f6f7f7;
+}
+
+/* Inline feedback */
+.qps-card-feedback {
+	border-top: 1px solid #f0f0f1;
+	display: none;
+	font-size: 12px;
+	padding: 5px 12px;
+}
+
+.qps-card-feedback--sending { color: #646970; display: block; }
+.qps-card-feedback--success  { color: #00a32a; display: block; }
+.qps-card-feedback--error    { color: #d63638; display: block; word-break: break-word; }
+
+/* Service badges */
+
+.qps-service-badge {
+	border-radius: 3px;
+	display: inline-block;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.03em;
+	padding: 2px 7px;
+	text-transform: uppercase;
+}
+
+.qps-service-instagram { background: #f3e8ff; color: #7c3aed; }
+.qps-service-twitter   { background: #e0f2fe; color: #0369a1; }
+.qps-service-threads   { background: #f0fdf4; color: #15803d; }
+.qps-service-facebook  { background: #eff6ff; color: #1d4ed8; }
+.qps-service-linkedin  { background: #ecfeff; color: #0e7490; }
+.qps-service-pinterest { background: #fff1f2; color: #be123c; }
+.qps-service-mastodon  { background: #f5f3ff; color: #5b21b6; }
 
