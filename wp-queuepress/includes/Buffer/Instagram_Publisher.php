@@ -8,8 +8,9 @@
  *
  * Responsibilities:
  *   - Select the active Instagram channel from Channel_Config.
- *   - Build the caption (extract/clean hashtags, assemble, enforce limit).
- *   - Build the asset list (image_source, NSFW override, dedup, limit).
+ *   - Build the caption (excerpt + full post + permalink + hashtags,
+ *     capped at the Instagram character limit).
+ *   - Build the asset list (NSFW → featured only, otherwise → featured + gallery).
  *   - Build the GraphQL createPost mutation.
  *   - Execute the mutation via Buffer_Client.
  *   - Return a normalized result array.
@@ -20,17 +21,9 @@
  *   - Save post meta.
  *   - Know about the WordPress admin.
  *
- * post_style architecture note (Sprint 3.1):
- *   $cfg is passed in full to build_caption(). Instagram does not expose
- *   post_style in its fields_for(), so $cfg['post_style'] will be absent
- *   for Instagram channels. When X/Threads publishers are added in 3.1,
- *   build_caption() can branch on $cfg['post_style'] without any signature
- *   change — the architecture already supports it.
- *
- * NSFW rule (fixed, not configurable):
- *   If the post has a tag with slug 'nsfw', image_source is forced to
- *   'featured_only' regardless of the channel configuration.
- *   See: Channel_Config docblock — NSFW rules section.
+ * Content & image source rules (fixed system rules, not user preferences):
+ *   - Content: excerpt + full_post (combined and capped at the platform limit).
+ *   - Images:  NSFW → featured only; otherwise → featured + gallery.
  *
  * @package QueuePostScheduler\Buffer
  */
@@ -142,6 +135,7 @@ final class Instagram_Publisher {
 		$is_nsfw = Publisher_Commons::is_nsfw($post);
 
 		// 4. Build assets — must have at least one image.
+		//    System rule: NSFW → featured only, otherwise featured + gallery.
 		$asset_urls = Publisher_Commons::build_assets($post, $cfg, $is_nsfw, self::MAX_IMAGES);
 		if (empty($asset_urls)) {
 			return array(
@@ -150,8 +144,8 @@ final class Instagram_Publisher {
 			);
 		}
 
-		// 5. Build caption.
-		$caption = Publisher_Commons::build_caption($post, $cfg, self::CHARACTER_LIMIT);
+		// 5. Build caption (excerpt + full_post + permalink + hashtags).
+		$caption = $this->build_combined_caption($post);
 
 		// 6. Build and execute mutation.
 		$mutation = $this->build_mutation($channel_id, $caption, $asset_urls);
@@ -163,10 +157,6 @@ final class Instagram_Publisher {
 
 	/**
 	 * Publishes a WordPress post to a specific Instagram channel ID.
-	 *
-	 * This mirrors `publish()` but explicitly targets the given channel id
-	 * and returns the normalized result including the `channel_id` and
-	 * `service` keys so callers can persist per-channel records.
 	 *
 	 * @param int $post_id
 	 * @param string $channel_id
@@ -192,11 +182,10 @@ final class Instagram_Publisher {
 			);
 		}
 
-		$caption = Publisher_Commons::build_caption($post, $cfg, self::CHARACTER_LIMIT);
+		$caption = $this->build_combined_caption($post);
 		$mutation = $this->build_mutation($channel_id, $caption, $asset_urls);
 		$response = $this->client->mutate($mutation);
 
-		// Normalize like publish() but include channel_id and service.
 		$normalized = $this->normalize_response($response, $channel_id);
 		$normalized['service'] = 'instagram';
 		$normalized['channel_id'] = $channel_id;
@@ -213,7 +202,6 @@ final class Instagram_Publisher {
 	 *
 	 * Iterates all stored channel configurations and returns the first entry
 	 * where provider='buffer', service='instagram', enabled=true.
-	 * The channel_id is the primary key — not the service.
 	 *
 	 * @return array{channel_id: string, cfg: array<string, mixed>}|null
 	 */
@@ -238,83 +226,67 @@ final class Instagram_Publisher {
 	}
 
 	// -------------------------------------------------------------------------
-	// NSFW detection
+	// Caption building (system rule: excerpt + full_post + permalink + hashtags)
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Returns true if the post has a tag with slug 'nsfw' (case-insensitive).
+	 * Build the Instagram caption as: excerpt + full_post + permalink + hashtags.
 	 *
-	 * This is a fixed platform rule, not a user preference.
-	 * See NSFW rules in Channel_Config docblock.
+	 * The combined body is then passed through Publisher_Commons::build_caption
+	 * with prepend_content so the smart-truncate step operates over the
+	 * combined block (preserving paragraph/word boundaries) and the resulting
+	 * length is capped at the Instagram character limit.
 	 *
-	 * @param WP_Post $post The post to check.
-	 * @return bool
+	 * @param WP_Post $post
+	 * @return string
 	 */
-	/**
-	 * Builds the ordered, deduplicated list of image URLs for the publication.
-	 *
-	 * Rules:
-	 *   - If NSFW: always use featured_only regardless of cfg['image_source'].
-	 *   - featured_only: [featured_image_url]
-	 *   - featured_plus_gallery: [featured, ...gallery], featured always first.
-	 *   - Deduplicate by URL preserving order (first occurrence wins).
-	 *   - Maximum MAX_IMAGES images.
-	 *   - If no valid images remain: return empty array (caller must error out).
-	 *
-	 * @param WP_Post              $post    The post.
-	 * @param array<string, mixed> $cfg     Channel configuration.
-	 * @param bool                 $is_nsfw Whether NSFW override applies.
-	 * @return string[] Ordered, deduplicated image URLs.
-	 */
-	/**
-	 * Builds the final caption for the Instagram publication.
-	 *
-	 * Process:
-	 *   1. Extract raw content according to content_source.
-	 *   2. Strip hashtags from content body (keep word, remove '#' prefix).
-	 *      Extracted hashtags are collected for reuse at the end.
-	 *   3. Build the hashtag block (guarantee #BunnyChase, complement to MIN_HASHTAGS).
-	 *   4. Calculate fixed space (title + permalink + hashtags + separators).
-	 *   5. Truncate only the content part to fit within CHARACTER_LIMIT.
-	 *   6. Assemble: title \n\n content \n\n permalink \n\n hashtags.
-	 *
-	 * post_style is available in $cfg for Sprint 3.1 (card_link support).
-	 * In Sprint 3.0 Instagram does not expose post_style; $cfg['post_style']
-	 * will be absent and this method simply builds a standard social post.
-	 *
-	 * @param WP_Post              $post The post.
-	 * @param array<string, mixed> $cfg  Channel configuration.
-	 * @return string Final caption, never exceeding CHARACTER_LIMIT chars.
-	 */
-	/**
-	 * Extracts hashtags from raw text and removes their '#' prefix in the body.
-	 *
-	 * For each '#word' found:
-	 *   - The word is stored in the extracted collection.
-	 *   - The '#' is removed from the text; the word remains in place.
-	 *
-	 * Example:
-	 *   Input:  "Review of #Ghostbusters and #Gozer"
-	 *   Output: ["Review of Ghostbusters and Gozer", ["Ghostbusters", "Gozer"]]
-	 *
-	 * @param string $text Raw content text.
-	 * @return array{0: string, 1: string[]} [cleaned_text, extracted_hashtag_words]
-	 */
-	/**
-	 * Builds the final hashtag block string.
-	 *
-	 * Rules (in order):
-	 *   1. Start from extracted hashtags (deduplicated, case-preserved).
-	 *   2. Guarantee REQUIRED_HASHTAG is present (case-insensitive check).
-	 *   3. If total < MIN_HASHTAGS: complement with WordPress post tags.
-	 *      WP tags are normalized: lowercased, spaces removed.
-	 *      Already-present hashtags (case-insensitive) are not duplicated.
-	 *   4. Never remove hashtags already in the extracted collection.
-	 *
-	 * @param WP_Post  $post              The post.
-	 * @param string[] $extracted_hashtags Words (without '#') extracted from content.
-	 * @return string Hashtag block, e.g. "#Ghostbusters #Gozer #BunnyChase"
-	 */
+	private function build_combined_caption(WP_Post $post): string {
+		// Build the excerpt and the full post as pure body content (no title,
+		// no permalink, no appended hashtags). Hashtags inside the content are
+		// preserved exactly where the author wrote them.
+		$excerpt = Publisher_Commons::build_caption(
+			$post,
+			array(),
+			PHP_INT_MAX,
+			array(
+				'force_source'      => 'excerpt',
+				'include_title'     => false,
+				'include_permalink' => false,
+			)
+		);
+
+		$full_post = Publisher_Commons::build_caption(
+			$post,
+			array(),
+			PHP_INT_MAX,
+			array(
+				'force_source'      => 'full_post',
+				'include_title'     => false,
+				'include_permalink' => false,
+			)
+		);
+
+		// Decoded title for the middle slot between excerpt and full_post.
+		$title = html_entity_decode((string) get_the_title($post), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+		// Instagram final order: excerpt + title + full_post.
+		$prepend = trim((string) $excerpt) . "\n\n" . trim($title) . "\n\n" . trim((string) $full_post);
+
+		// Final caption: include_permalink=true appends the permalink at the end.
+		// No hashtags block is added; whatever the author wrote stays in place.
+		return Publisher_Commons::build_caption(
+			$post,
+			array(),
+			self::CHARACTER_LIMIT,
+			array(
+				'include_title'     => false,
+				'include_permalink' => true,
+				'margin'            => 0.10,
+				'prepend_content'   => $prepend,
+			)
+		);
+	}
+
 	// -------------------------------------------------------------------------
 	// Mutation building
 	// -------------------------------------------------------------------------
@@ -322,7 +294,7 @@ final class Instagram_Publisher {
 	/**
 	 * Builds the createPost GraphQL mutation string.
 	 *
-	 * Uses the exact format validated in n8n. Fixed values for Sprint 3.0:
+	 * Fixed values:
 	 *   mode:                          addToQueue
 	 *   schedulingType:                automatic
 	 *   metadata.instagram.type:       post
@@ -334,7 +306,6 @@ final class Instagram_Publisher {
 	 * @return string GraphQL mutation string.
 	 */
 	private function build_mutation(string $channel_id, string $caption, array $asset_urls): string {
-		// Delegate image-based mutation construction to shared commons.
 		return Mutation_Commons::build_create_post_mutation_from_image_urls($channel_id, $caption, $asset_urls);
 	}
 
@@ -345,12 +316,8 @@ final class Instagram_Publisher {
 	/**
 	 * Normalizes the raw Buffer API response into a standard result array.
 	 *
-	 * PostActionSuccess → success=true with post_id, status, channel_id.
-	 * MutationError     → success=false with the exact Buffer message, unmodified.
-	 * Unexpected        → success=false with a generic message.
-	 *
-	 * @param array<string, mixed> $response   Full decoded response from Buffer_Client::mutate().
-	 * @param string               $channel_id The channel ID used for the publication.
+	 * @param array<string, mixed> $response
+	 * @param string               $channel_id
 	 * @return array{success: bool, post_id?: string, status?: string, channel_id?: string, message?: string}
 	 */
 	private function normalize_response(array $response, string $channel_id): array {

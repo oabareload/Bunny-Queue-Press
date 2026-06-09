@@ -264,11 +264,14 @@
 }
 
 .qps-card-image {
-	flex: 0 0 108px;
-	width: 108px;
+	flex: 0 0 140px;
+	width: 140px;
 	height: 100%;
-	overflow: hidden;
+	min-height: 140px;
+	overflow: none;
 	border-radius: 0;
+	background: #eef0f1;
+	position: relative;
 }
 
 .qps-card-image img {
@@ -276,6 +279,28 @@
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
+}
+
+.qps-card-image--placeholder {
+	align-items: center;
+	background: linear-gradient(135deg, #eef0f1 0%, #dcdcde 100%);
+	color: #8c8f94;
+	display: flex;
+	justify-content: center;
+}
+
+.qps-card-image-placeholder {
+	align-items: center;
+	color: inherit;
+	display: flex;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+}
+
+.qps-icon--lg {
+	font-size: 36px;
+	opacity: 0.55;
 }
 
 .qps-card-body {
@@ -1088,7 +1113,9 @@ a.qps-card-title-link:hover {
 	text-decoration: underline;
 }
 
-/* Actions: indicator + ⋮, aligned to the first line of title */
+/* Actions container — preserved as a positioning hook for legacy child themes.
+   The header action menu has been removed in 2.1.0; this rule is a no-op now but
+   kept so existing customizations targeting `.qps-card-actions` do not break. */
 .qps-card-actions {
 	align-items: center;
 	display: flex;
@@ -1097,6 +1124,13 @@ a.qps-card-title-link:hover {
 	margin-top: 1px; /* optical alignment with title cap-height */
 }
 
+/* ==========================================================================
+   Legacy selectors (2.0.x) — no longer rendered by the plugin.
+   Kept here for back-compat with any user CSS that may target them.
+   Remove these rules safely in 3.0.0.
+   ========================================================================== */
+
+/* Legacy: per-card Unicode ✓ indicator (replaced by .qps-platform--success) */
 .qps-buffer-indicator {
 	color: #00a32a;
 	cursor: default;
@@ -1104,7 +1138,7 @@ a.qps-card-title-link:hover {
 	line-height: 1;
 }
 
-/* ⋮ toggle button */
+/* Legacy: header-anchored ⋮ action menu (replaced by .qps-image-menu over the image) */
 .qps-action-menu {
 	position: relative;
 }
@@ -1131,7 +1165,6 @@ a.qps-card-title-link:hover {
 	color: #1d2327;
 }
 
-/* Dropdown list */
 .qps-action-menu-list {
 	background: #fff;
 	border: 1px solid #c3c4c7;
@@ -1203,4 +1236,140 @@ a.qps-card-title-link:hover {
 .qps-service-linkedin  { background: #ecfeff; color: #0e7490; }
 .qps-service-pinterest { background: #fff1f2; color: #be123c; }
 .qps-service-mastodon  { background: #f5f3ff; color: #5b21b6; }
+
+/* ==========================================================================
+   Pipeline cards — image-anchored action menu + platform status strip
+   ========================================================================== */
+
+.qps-icon {
+	display: inline-block;
+	fill: currentColor;
+	height: 1.5em;
+	vertical-align: -0.15em;
+	width: 1.5em;
+}
+
+/* Action menu overlay (top-right of the image) */
+.qps-image-menu {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	z-index: 2;
+}
+
+.qps-image-menu-toggle {
+	align-items: center;
+	background: rgba(255, 255, 255, 0.92);
+	border: 1px solid rgba(0, 0, 0, 0.08);
+	border-radius: 6px;
+	color: #1d2327;
+	cursor: pointer;
+	display: inline-flex;
+	height: 28px;
+	justify-content: center;
+	padding: 0;
+	width: 28px;
+}
+
+.qps-image-menu-toggle:hover,
+.qps-image-menu-toggle:focus-visible {
+	background: #fff;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+	outline: none;
+}
+
+.qps-image-menu-list {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+	list-style: none;
+	margin: 4px 0 0;
+	min-width: 180px;
+	padding: 4px 0;
+	position: absolute;
+	right: 0;
+	top: 100%;
+	z-index: 3;
+}
+
+.qps-image-menu-list[hidden] {
+	display: none;
+}
+
+.qps-image-menu-list li {
+	margin: 0;
+}
+
+.qps-image-menu-list button {
+	align-items: center;
+	background: transparent;
+	border: 0;
+	color: #1d2327;
+	cursor: pointer;
+	display: flex;
+	gap: 8px;
+	padding: 8px 12px;
+	text-align: left;
+	width: 100%;
+}
+
+.qps-image-menu-list button:hover {
+	background: #f6f7f7;
+}
+
+.qps-image-menu-list button .qps-icon {
+	color: #2271b1;
+	font-size: 14px;
+}
+
+/* Platform status strip (bottom-left of the image) */
+.qps-platform-strip {
+	align-items: center;
+	background: rgba(0, 0, 0, 0.55);
+	border-radius: 6px;
+	bottom: 6px;
+	color: #fff;
+	display: inline-flex;
+	gap: 1px;
+	left: 6px;
+	padding: 2px 4px;
+	position: absolute;
+	z-index: 1;
+	max-width: 55%; /* occupy ~half the image width */
+}
+
+.qps-platform {
+	align-items: center;
+	border-radius: 3px;
+	color: rgba(255, 255, 255, 0.45); /* idle default */
+	display: inline-flex;
+	font-size: 11px;
+	height: 20px;
+	justify-content: center;
+	line-height: 1;
+	padding: 0;
+	transition: color 0.15s ease;
+	width: 20px;
+}
+
+.qps-platform--idle {
+	color: rgba(255, 255, 255, 0.45);
+}
+
+.qps-platform--success {
+	color: #46b450;
+}
+
+.qps-platform--scheduled {
+	color: #f0b400;
+}
+
+.qps-platform--pending {
+	color: #f0b400;
+}
+
+.qps-platform--error {
+	color: #ff6b6b;
+}
 

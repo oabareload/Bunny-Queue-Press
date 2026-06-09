@@ -1,10 +1,12 @@
 /**
- * Pipeline — Buffer action menu and autosave.
+ * Pipeline — Buffer action menu and platform status strip.
  *
  * Responsibilities:
  *   1. Toggle the ⋮ action menu open/closed per card.
  *   2. Close any open menu when clicking outside.
  *   3. Handle "Send to Buffer" clicks: AJAX request, loader, feedback.
+ *   4. After a successful publication, update the platform status strip
+ *      per channel (switch idle → success).
  *
  * Error messages from Buffer are displayed exactly as received.
  * No translation. No reinterpretation.
@@ -24,10 +26,10 @@
 
 	function initMenus() {
 		document.addEventListener( 'click', function ( e ) {
-			var toggle = e.target.closest( '.qps-action-menu-toggle' );
+			var toggle = e.target.closest( '.qps-image-menu-toggle' );
 
 			// Close all menus first.
-			document.querySelectorAll( '.qps-action-menu-list' ).forEach( function ( list ) {
+			document.querySelectorAll( '.qps-image-menu-list' ).forEach( function ( list ) {
 				list.hidden = true;
 				var btn = list.previousElementSibling;
 				if ( btn ) { btn.setAttribute( 'aria-expanded', 'false' ); }
@@ -55,16 +57,16 @@
 			if ( ! btn ) { return; }
 
 			// Close the menu.
-			var menu = btn.closest( '.qps-action-menu-list' );
+			var menu = btn.closest( '.qps-image-menu-list' );
 			if ( menu ) {
 				menu.hidden = true;
 				var toggle = menu.previousElementSibling;
 				if ( toggle ) { toggle.setAttribute( 'aria-expanded', 'false' ); }
 			}
 
-			var card    = btn.closest( '.qps-card' );
-			var postId  = btn.getAttribute( 'data-post-id' );
-			var nonce   = btn.getAttribute( 'data-nonce' );
+			var card     = btn.closest( '.qps-card' );
+			var postId   = btn.getAttribute( 'data-post-id' );
+			var nonce    = btn.getAttribute( 'data-nonce' );
 			var feedback = card ? card.querySelector( '.qps-card-feedback' ) : null;
 
 			if ( ! postId || ! nonce ) { return; }
@@ -86,7 +88,6 @@
 			} )
 			.then( function ( data ) {
 				if ( data && data.success ) {
-					// Prefer an aggregated message provided by the server.
 					var aggMsg = ( data.data && data.data.message ) ? data.data.message : null;
 					var sentAt = ( data.data && data.data.sent_at ) ? data.data.sent_at : '';
 					if ( aggMsg ) {
@@ -95,15 +96,9 @@
 						showFeedback( feedback, 'success', i18n.sent || 'Sent' );
 					}
 
-					// Update the indicator if any channel succeeded.
+					// Update the platform status strip based on per-channel results.
 					var results = ( data.data && data.data.results ) ? data.data.results : null;
-					var anySuccess = false;
-					if ( results ) {
-						for ( var k in results ) {
-							if ( results[k] && results[k].success ) { anySuccess = true; break; }
-						}
-					}
-					if ( anySuccess ) { updateBufferIndicator( card, sentAt ); }
+					if ( results ) { updatePlatformStrip( card, results ); }
 				} else {
 					var errMsg = ( data && data.data && data.data.message )
 						? data.data.message
@@ -126,34 +121,46 @@
 	 */
 	function showFeedback( el, state, msg ) {
 		if ( ! el ) { return; }
-		el.textContent  = msg;
-		el.className    = 'qps-card-feedback qps-card-feedback--' + state;
+		el.textContent = msg;
+		el.className   = 'qps-card-feedback qps-card-feedback--' + state;
 	}
 
 	/**
-	 * Updates the Buffer sent indicator checkmark on the card.
-	 * If the indicator already exists, update its title; otherwise create it.
+	 * Updates the platform status strip on a card after a publication attempt.
 	 *
-	 * @param {Element|null} card   The card li element.
-	 * @param {string}       sentAt Sent datetime string.
+	 * For each result, finds the matching `.qps-platform[data-service="..."]`
+	 * span and switches its state modifier to `--success` or `--error`.
+	 *
+	 * @param {Element|null} card    The card li element.
+	 * @param {Object}       results Map of channel_id => { service, success, status, sent_at }.
 	 */
-	function updateBufferIndicator( card, sentAt ) {
-		if ( ! card ) { return; }
-		var actionsEl = card.querySelector( '.qps-card-actions' );
-		if ( ! actionsEl ) { return; }
+	function updatePlatformStrip( card, results ) {
+		if ( ! card || ! results ) { return; }
+		var strip = card.querySelector( '.qps-platform-strip' );
+		if ( ! strip ) { return; }
 
-		var indicator = actionsEl.querySelector( '.qps-buffer-indicator' );
-		var title     = ( i18n.sentOn || 'Sent to Buffer on' ) + ' ' + sentAt;
+		Object.keys( results ).forEach( function ( cid ) {
+			var r = results[ cid ];
+			if ( ! r || typeof r !== 'object' ) { return; }
+			var service = ( r.service || '' ).toLowerCase();
+			if ( ! service ) { return; }
+			var platform = strip.querySelector( '.qps-platform[data-service="' + service + '"]' );
+			if ( ! platform ) { return; }
 
-		if ( indicator ) {
-			indicator.setAttribute( 'title', title );
-		} else {
-			indicator          = document.createElement( 'span' );
-			indicator.className = 'qps-buffer-indicator';
-			indicator.setAttribute( 'title', title );
-			indicator.innerHTML = '&#10003;';
-			actionsEl.insertBefore( indicator, actionsEl.firstChild );
-		}
+			platform.classList.remove( 'qps-platform--idle', 'qps-platform--success', 'qps-platform--error' );
+			if ( r.success ) {
+				platform.classList.add( 'qps-platform--success' );
+			} else {
+				platform.classList.add( 'qps-platform--error' );
+			}
+
+			// Update the tooltip with the latest state.
+			var label = ( service.charAt( 0 ).toUpperCase() + service.slice( 1 ) );
+			var lines = [ label, r.success ? ( i18n.published || 'Published' ) : ( i18n.error || 'Error' ) ];
+			if ( r.sent_at ) { lines.push( r.sent_at ); }
+			if ( r.status )  { lines.push( r.status ); }
+			platform.setAttribute( 'title', lines.join( '\n' ) );
+		} );
 	}
 
 	// -------------------------------------------------------------------------

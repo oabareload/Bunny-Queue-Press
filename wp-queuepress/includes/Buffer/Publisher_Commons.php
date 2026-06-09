@@ -33,8 +33,51 @@ final class Publisher_Commons {
         return false;
     }
 
-    public static function build_assets(WP_Post $post, array $cfg, bool $is_nsfw, int $max_images): array {
-        $effective_source = $is_nsfw ? 'featured_only' : (string) ($cfg['image_source'] ?? 'featured_only');
+    /**
+     * Get the pretty/friendly URL for a post.
+     *
+     * For published posts, uses get_permalink().
+     * For unpublished posts (draft, future, pending, etc.), reconstructs the URL
+     * using get_sample_permalink() to generate a preview-friendly URL.
+     *
+     * @param WP_Post $post
+     * @return string
+     */
+    public static function get_pretty_post_url(WP_Post $post): string {
+        if ('publish' === $post->post_status) {
+            return (string) get_permalink($post);
+        }
+
+        $sample_permalink = get_sample_permalink($post->ID);
+        $base_structure = $sample_permalink[0];
+        $post_slug = $sample_permalink[1];
+
+        return str_replace('%postname%', $post_slug, $base_structure);
+    }
+
+    /**
+     * Build the ordered, deduplicated list of image URLs for the publication.
+     *
+     * Image source is a fixed system rule, not a user preference:
+     *   - NSFW (and not $allow_gallery_on_nsfw) → featured_only
+     *   - Otherwise                              → featured_plus_gallery
+     *
+     * Rules:
+     *   - featured_only: [featured_image_url]
+     *   - featured_plus_gallery: [featured, ...gallery], featured always first.
+     *   - Deduplicate by URL preserving order (first occurrence wins).
+     *   - Maximum $max_images images.
+     *   - If no valid images remain: return empty array (caller must error out).
+     *
+     * @param WP_Post $post    The post.
+     * @param array   $cfg     Channel configuration (no longer reads image_source).
+     * @param bool    $is_nsfw Whether NSFW override applies.
+     * @param int     $max_images Maximum number of images to return.
+     * @param bool    $allow_gallery_on_nsfw When true, NSFW posts still include gallery.
+     * @return string[] Ordered, deduplicated image URLs.
+     */
+    public static function build_assets(WP_Post $post, array $cfg, bool $is_nsfw, int $max_images, bool $allow_gallery_on_nsfw = false): array {
+        $effective_source = ($is_nsfw && ! $allow_gallery_on_nsfw) ? 'featured_only' : 'featured_plus_gallery';
 
         $urls = array();
         $featured = get_the_post_thumbnail_url($post->ID, 'full');
@@ -47,7 +90,8 @@ final class Publisher_Commons {
             foreach ($gallery as $u) { $urls[] = $u; }
         }
 
-        // Deduplicate preserving order.
+        $found_urls = $urls;
+
         $seen = array();
         $unique = array();
         foreach ($urls as $u) {
@@ -57,18 +101,41 @@ final class Publisher_Commons {
             }
         }
 
-        return array_slice($unique, 0, $max_images);
+        $result = array_slice($unique, 0, $max_images);
+
+        if (class_exists(Buffer_Debug::class)) {
+            Buffer_Debug::add_entry(array(
+                'type' => 'assets_filter',
+                'post_id' => $post->ID,
+                'effective_source' => $effective_source,
+                'is_nsfw' => $is_nsfw,
+                'allow_gallery_on_nsfw' => $allow_gallery_on_nsfw,
+                'found_count' => count($found_urls),
+                'returned_count' => count($result),
+                'found' => array_values($found_urls),
+                'returned' => array_values($result),
+            ));
+        }
+
+        return $result;
     }
 
     public static function get_gallery_image_urls(WP_Post $post): array {
         $urls = array();
 
+        $raw_content = is_string($post->post_content) ? $post->post_content : '';
+
         if (function_exists('parse_blocks') && has_blocks($post->post_content)) {
             $blocks = parse_blocks($post->post_content);
 
-            $walker = static function (array $blocks) use (&$walker, &$urls) {
+            $diagnostic_found = array();
+            $diagnostic_block_names = array();
+
+            $walker = static function (array $blocks) use (&$walker, &$urls, &$diagnostic_found, &$diagnostic_block_names) {
                 foreach ($blocks as $block) {
                     $name = $block['blockName'] ?? '';
+
+                    if ($name !== '') { $diagnostic_block_names[] = $name; }
 
                     if ('core/gallery' === $name) {
                         $ids = $block['attrs']['ids'] ?? array();
@@ -78,7 +145,7 @@ final class Publisher_Commons {
                         if (is_array($ids) && ! empty($ids)) {
                             foreach ($ids as $id) {
                                 $url = wp_get_attachment_url((int) $id);
-                                if ($url) { $urls[] = $url; }
+                                if ($url) { $urls[] = $url; $diagnostic_found[] = $url; }
                             }
                         }
 
@@ -88,11 +155,11 @@ final class Publisher_Commons {
                                     $id = (int) ($inner['attrs']['id'] ?? 0);
                                     if ($id > 0) {
                                         $url = wp_get_attachment_url($id);
-                                        if ($url) { $urls[] = $url; }
+                                        if ($url) { $urls[] = $url; $diagnostic_found[] = $url; }
                                     }
                                     $img_url = $inner['attrs']['url'] ?? '';
                                     if (! empty($img_url) && is_string($img_url)) {
-                                        $urls[] = esc_url_raw($img_url);
+                                        $urls[] = esc_url_raw($img_url); $diagnostic_found[] = esc_url_raw($img_url);
                                     }
                                 }
                             }
@@ -104,38 +171,38 @@ final class Publisher_Commons {
                         if (! empty($attrs['imageData']) && is_array($attrs['imageData'])) {
                             foreach ($attrs['imageData'] as $img) {
                                 if (is_array($img) && ! empty($img['url'])) {
-                                    $urls[] = esc_url_raw($img['url']);
+                                    $urls[] = esc_url_raw($img['url']); $diagnostic_found[] = esc_url_raw($img['url']);
                                 }
                             }
                         }
                         if (! empty($attrs['imageUrl']) && is_string($attrs['imageUrl'])) {
-                            $urls[] = esc_url_raw($attrs['imageUrl']);
+                            $urls[] = esc_url_raw($attrs['imageUrl']); $diagnostic_found[] = esc_url_raw($attrs['imageUrl']);
                         }
                         if (! empty($attrs['imageId']) && is_numeric($attrs['imageId'])) {
                             $id = (int) $attrs['imageId'];
                             $url = wp_get_attachment_url($id);
-                            if ($url) { $urls[] = $url; }
+                            if ($url) { $urls[] = $url; $diagnostic_found[] = $url; }
                         }
                         if (! empty($attrs['ids']) && is_array($attrs['ids'])) {
                             foreach ($attrs['ids'] as $id) {
                                 $url = wp_get_attachment_url((int) $id);
-                                if ($url) { $urls[] = $url; }
+                                if ($url) { $urls[] = $url; $diagnostic_found[] = $url; }
                             }
                         }
                         if (! empty($attrs['images']) && is_array($attrs['images'])) {
                             foreach ($attrs['images'] as $img) {
                                 if (is_array($img) && ! empty($img['url'])) {
-                                    $urls[] = esc_url_raw($img['url']);
+                                    $urls[] = esc_url_raw($img['url']); $diagnostic_found[] = esc_url_raw($img['url']);
                                 } elseif (is_numeric($img)) {
                                     $url = wp_get_attachment_url((int) $img);
-                                    if ($url) { $urls[] = $url; }
+                                    if ($url) { $urls[] = $url; $diagnostic_found[] = $url; }
                                 } elseif (is_string($img)) {
-                                    $urls[] = esc_url_raw($img);
+                                    $urls[] = esc_url_raw($img); $diagnostic_found[] = esc_url_raw($img);
                                 }
                             }
                         }
                         if (! empty($attrs['url']) && is_string($attrs['url'])) {
-                            $urls[] = esc_url_raw($attrs['url']);
+                            $urls[] = esc_url_raw($attrs['url']); $diagnostic_found[] = esc_url_raw($attrs['url']);
                         }
                     }
 
@@ -143,11 +210,11 @@ final class Publisher_Commons {
                         $id = (int) ($block['attrs']['id'] ?? 0);
                         if ($id > 0) {
                             $url = wp_get_attachment_url($id);
-                            if ($url) { $urls[] = $url; }
+                            if ($url) { $urls[] = $url; $diagnostic_found[] = $url; }
                         }
                         $img_url = $block['attrs']['url'] ?? '';
                         if (! empty($img_url) && is_string($img_url)) {
-                            $urls[] = esc_url_raw($img_url);
+                            $urls[] = esc_url_raw($img_url); $diagnostic_found[] = esc_url_raw($img_url);
                         }
                     }
 
@@ -159,22 +226,59 @@ final class Publisher_Commons {
 
             $walker($blocks);
 
-            // Deduplicate preserving order
             $seen = array();
             $unique = array();
             foreach ($urls as $u) {
                 if (! isset($seen[$u])) { $seen[$u] = true; $unique[] = $u; }
             }
 
+            if (class_exists(Buffer_Debug::class)) {
+                Buffer_Debug::add_entry(array(
+                    'type' => 'gallery_extract',
+                    'post_id' => $post->ID,
+                    'mode' => 'blocks',
+                    'raw_excerpt' => mb_substr($raw_content, 0, 2000),
+                    'block_count' => count($blocks),
+                    'block_names' => array_values(array_unique($diagnostic_block_names)),
+                    'found_count' => count($diagnostic_found),
+                    'found' => array_values($diagnostic_found),
+                    'unique_count' => count($unique),
+                    'unique' => $unique,
+                ));
+            }
+
             return $unique;
         }
 
-        // Fallback: gallery shortcode
         if (preg_match('/\[gallery[^\]]*ids=["\']?([\d,]+)["\']?/i', $post->post_content, $matches)) {
             $ids = array_filter(array_map('intval', explode(',', $matches[1])));
+            $found = array();
             foreach ($ids as $id) {
                 $url = wp_get_attachment_url($id);
-                if ($url) { $urls[] = $url; }
+                if ($url) { $urls[] = $url; $found[] = $url; }
+            }
+
+            if (class_exists(Buffer_Debug::class)) {
+                Buffer_Debug::add_entry(array(
+                    'type' => 'gallery_extract',
+                    'post_id' => $post->ID,
+                    'mode' => 'shortcode',
+                    'raw_excerpt' => mb_substr($raw_content, 0, 2000),
+                    'ids' => $ids,
+                    'found_count' => count($found),
+                    'found' => $found,
+                ));
+            }
+        } else {
+            if (class_exists(Buffer_Debug::class)) {
+                Buffer_Debug::add_entry(array(
+                    'type' => 'gallery_extract',
+                    'post_id' => $post->ID,
+                    'mode' => 'none',
+                    'raw_excerpt' => mb_substr($raw_content, 0, 2000),
+                    'found_count' => 0,
+                    'found' => array(),
+                ));
             }
         }
 
@@ -184,10 +288,21 @@ final class Publisher_Commons {
     /**
      * Build a caption honoring channel config and options.
      *
+     * Content source is a fixed system rule, not a user preference. When
+     * 'force_source' is not provided, the content source defaults to
+     * 'full_post'.
+     *
      * Options:
      *  - 'include_permalink' => bool (default true)
-     *  - 'force_source' => 'excerpt'|'full_post'|null (default null)
-     *  - 'post_style' => string|null
+     *  - 'force_source'      => 'excerpt'|'full_post'|null (default null → 'full_post')
+     *  - 'post_style'        => string|null
+     *  - 'margin'            => float (default 0.10)
+     *  - 'prepend_content'   => string (optional) Raw text to prepend to the
+     *                           body content before the smart-truncate step.
+     *                           Used by Instagram Social Post to combine
+     *                           excerpt + full_post into a single block whose
+     *                           final length is still capped by the platform
+     *                           character limit.
      *
      * @param WP_Post $post
      * @param array<string,mixed> $cfg
@@ -197,22 +312,31 @@ final class Publisher_Commons {
      */
     public static function build_caption(WP_Post $post, array $cfg, int $character_limit, array $options = array()): string {
         $include_permalink = isset($options['include_permalink']) ? (bool) $options['include_permalink'] : true;
+        $include_title     = ! isset($options['include_title']) || (bool) $options['include_title'];  // default true
         $force_source = $options['force_source'] ?? null;
         $post_style = $options['post_style'] ?? null;
+        $margin = isset($options['margin']) ? (float) $options['margin'] : 0.10;
 
-        // Determine content source: forced option wins, otherwise channel config.
-        $content_source = null;
         if (in_array($force_source, array('excerpt', 'full_post'), true)) {
             $content_source = $force_source;
         } else {
-            $content_source = (string) ($cfg['content_source'] ?? 'excerpt');
+            $content_source = 'full_post';
         }
 
-        $title = get_the_title($post);
-        $permalink = (string) get_permalink($post);
+        // Decode HTML entities in the title (e.g. &#8211; → –, &#8217; → ').
+        $title = html_entity_decode((string) get_the_title($post), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $permalink = self::get_pretty_post_url($post);
 
         $raw_content = '';
-        if (function_exists('parse_blocks') && has_blocks($post->post_content)) {
+        if ('excerpt' === $content_source) {
+            // force_source='excerpt' must always use post_excerpt, regardless
+            // of whether the post has Gutenberg blocks. Fall back to the body
+            // (stripped) only if no excerpt is available.
+            $excerpt_src = ! empty($post->post_excerpt)
+                ? (string) $post->post_excerpt
+                : (string) $post->post_content;
+            $raw_content = self::strip_tags_preserve_breaks($excerpt_src);
+        } elseif (function_exists('parse_blocks') && has_blocks($post->post_content)) {
             $blocks = parse_blocks($post->post_content);
             $parts = array();
             $walker = static function (array $blocks) use (&$walker, &$parts) {
@@ -224,23 +348,23 @@ final class Publisher_Commons {
                     }
                     $inner = $block['innerHTML'] ?? '';
                     if (! empty($inner) && is_string($inner)) {
-                        $text = trim(wp_strip_all_tags($inner));
+                        $text = self::strip_tags_preserve_breaks($inner);
                         if ($text !== '') { $parts[] = $text; }
                     }
                     $attrs = $block['attrs'] ?? array();
                     if (! empty($attrs['title']) && is_string($attrs['title'])) {
-                        $tt = trim(wp_strip_all_tags($attrs['title']));
+                        $tt = self::strip_tags_preserve_breaks($attrs['title']);
                         if ($tt !== '') { $parts[] = $tt; }
                     }
                     if (! empty($attrs['content'])) {
                         if (is_string($attrs['content'])) {
-                            $ct = trim(wp_strip_all_tags($attrs['content']));
+                            $ct = self::strip_tags_preserve_breaks($attrs['content']);
                             if ($ct !== '') { $parts[] = $ct; }
                         } elseif (is_array($attrs['content'])) {
                             $extract = null;
                             $extract = static function ($value) use (&$parts, &$extract) {
                                 if (is_string($value)) {
-                                    $text = trim(wp_strip_all_tags($value));
+                                    $text = Publisher_Commons::strip_tags_preserve_breaks($value);
                                     if ($text !== '') { $parts[] = $text; }
                                     return;
                                 }
@@ -258,36 +382,133 @@ final class Publisher_Commons {
             $raw_content = implode("\n\n", $parts);
         } else {
             if ($content_source === 'full_post') {
-                $raw_content = wp_strip_all_tags($post->post_content);
+                $raw_content = self::strip_tags_preserve_breaks($post->post_content);
             } elseif (! empty($post->post_excerpt)) {
                 $raw_content = (string) $post->post_excerpt;
             } else {
-                $raw_content = wp_strip_all_tags($post->post_content);
+                $raw_content = self::strip_tags_preserve_breaks($post->post_content);
             }
         }
 
-        $raw_content = trim((string) $raw_content);
+        $raw_content = str_replace(array("\r\n", "\r"), "\n", trim((string) $raw_content));
+        $raw_content = (string) preg_replace('/\n{3,}/u', "\n\n", $raw_content);
 
-        list($clean_content, $extracted_hashtags) = self::extract_and_clean_hashtags($raw_content);
-        $hashtag_block = self::build_hashtags($post, $extracted_hashtags, 'BunnyChase', 5);
-
-        // Calculate fixed length: title + (maybe permalink) + hashtags + separators
-        $fixed_length = mb_strlen($title, 'UTF-8') + mb_strlen($hashtag_block, 'UTF-8') + 4; // base separators
-        if ($include_permalink) {
-            $fixed_length += mb_strlen($permalink, 'UTF-8') + 2; // if permalink included add separator
+        // Optional prepend: lets callers (Instagram Social Post) attach a
+        // pre-built block (e.g. excerpt) ahead of the body content before
+        // smart-truncate runs. System rule, not a user preference.
+        //
+        // The prepended text is run through strip_tags_preserve_breaks() so
+        // any HTML residual or HTML-encoded entities (e.g. &#8211;, &)
+        // are decoded/cleaned before being concatenated. Without this, callers
+        // passing pre-built excerpt/full_post blocks would leak entities or
+        // <p>/<br> tags into the final caption.
+        $prepend = isset($options['prepend_content']) ? (string) $options['prepend_content'] : '';
+        if ($prepend !== '') {
+            $prepend = self::strip_tags_preserve_breaks($prepend);
+            $prepend = str_replace(array("\r\n", "\r"), "\n", trim($prepend));
+            $prepend = (string) preg_replace('/\n{3,}/u', "\n\n", $prepend);
+            $raw_content = $prepend . "\n\n" . $raw_content;
         }
-        $available = $character_limit - $fixed_length;
 
-        if ($available <= 0) { $content_part = ''; }
-        elseif (mb_strlen($clean_content, 'UTF-8') > $available) { $content_part = mb_substr($clean_content, 0, $available, 'UTF-8'); }
-        else { $content_part = $clean_content; }
+        // Hashtags: the system no longer extracts, rebuilds or appends a
+        // hashtags block. They stay exactly where the author wrote them in
+        // the content. If smart_truncate cuts a hashtag, that's accepted.
+        $clean_content = $raw_content;
 
-        $parts = array($title);
-        if ($content_part !== '') { $parts[] = $content_part; }
-        if ($include_permalink) { $parts[] = $permalink; }
-        if ($hashtag_block !== '') { $parts[] = $hashtag_block; }
-        $parts = array_filter($parts);
-        return implode("\n\n", $parts);
+        $effective_limit = $character_limit;
+        if ($character_limit !== PHP_INT_MAX) {
+            $effective_limit = max(1, (int) floor($character_limit * (1 - $margin)));
+        }
+
+        // Calculate fixed length: title (if included) + (maybe permalink) + separators.
+        $separator = "\n\n";
+        $fixed_length = 0;
+        if ($include_title && $title !== '') {
+            $fixed_length += mb_strlen($title, 'UTF-8');
+        }
+        if ($include_permalink) {
+            $fixed_length += mb_strlen($separator, 'UTF-8') + mb_strlen($permalink, 'UTF-8');
+        }
+        $content_separator_len = mb_strlen($separator, 'UTF-8');
+        $available = $effective_limit - $fixed_length - $content_separator_len;
+
+        if ($available <= 0) {
+            $content_part = '';
+        } elseif (mb_strlen($clean_content, 'UTF-8') <= $available) {
+            $content_part = $clean_content;
+        } else {
+            $content_part = self::smart_truncate($clean_content, $available);
+        }
+
+        $assembled = array();
+        if ($include_title && $title !== '') { $assembled[] = $title; }
+        if ($content_part !== '') { $assembled[] = $content_part; }
+        if ($include_permalink) { $assembled[] = $permalink; }
+
+        return implode("\n\n", array_filter($assembled, static fn (string $s): bool => $s !== ''));
+    }
+
+    /**
+     * Truncates $text to at most $limit UTF-8 characters without cutting mid-word.
+     *
+     * Search priority (scanning backwards from position $limit):
+     *   1. Last "\n" within a lookahead window of 20% of $limit (min 30 chars).
+     *   2. Last "." within the same window.
+     *   3. Last " " (space) within the same window.
+     *   4. Hard cut at $limit (only when no delimiter found in window).
+     *
+     * @param string $text
+     * @param int    $limit
+     * @return string
+     */
+    private static function smart_truncate(string $text, int $limit): string {
+        $len = mb_strlen($text, 'UTF-8');
+        if ($len <= $limit) { return $text; }
+
+        $candidate = mb_substr($text, 0, $limit, 'UTF-8');
+
+        $window = max(30, (int) floor($limit * 0.20));
+        $scan_from = max(0, $limit - $window);
+
+        $nl_pos = mb_strrpos($candidate, "\n", 0, 'UTF-8');
+        if ($nl_pos !== false && $nl_pos >= $scan_from) {
+            return rtrim(mb_substr($text, 0, $nl_pos, 'UTF-8'));
+        }
+
+        $dot_pos = mb_strrpos($candidate, '.', 0, 'UTF-8');
+        if ($dot_pos !== false && $dot_pos >= $scan_from) {
+            return mb_substr($text, 0, $dot_pos + 1, 'UTF-8');
+        }
+
+        $space_pos = mb_strrpos($candidate, ' ', 0, 'UTF-8');
+        if ($space_pos !== false && $space_pos >= $scan_from) {
+            return rtrim(mb_substr($text, 0, $space_pos, 'UTF-8'));
+        }
+
+        return $candidate;
+    }
+
+    /**
+     * Strips HTML tags from a string while preserving line break semantics.
+     *
+     * Converts <br> and <br/> to \n before stripping, so manual line breaks
+     * inside paragraphs or custom block attributes are not lost.
+     * Also inserts \n after block-level closing tags so that adjacent
+     * block elements (e.g. <p>A</p><p>B</p>) produce separate lines
+     * instead of running together.
+     *
+     * @param string $html Raw HTML string.
+     * @return string Plain text with newlines preserved.
+     */
+    private static function strip_tags_preserve_breaks(string $html): string {
+        $text = preg_replace('/<br\s*\/?>/iu', "\n", $html);
+        $text = preg_replace('/<\/(p|div|li|h[1-6]|blockquote|pre)>/iu', "</$1>\n", (string) $text);
+        $text = wp_strip_all_tags((string) $text);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = str_replace(array("\r\n", "\r"), "\n", $text);
+        $text = (string) preg_replace('/\n{3,}/u', "\n\n", $text);
+
+        return trim($text);
     }
 
     public static function extract_and_clean_hashtags(string $text): array {
@@ -341,43 +562,89 @@ final class Publisher_Commons {
     }
 
     /**
-     * Split a long caption into chunks not exceeding $limit characters.
-     * Preserves words (doesn't cut mid-word) and returns array of strings.
+     * Splits a long caption into chunks not exceeding $limit characters.
      *
-     * @param string $text
-     * @param int $limit
+     * Strategy:
+     *   1. Split on paragraph breaks (\n\n) first.
+     *   2. If a paragraph fits, accumulate into the current chunk.
+     *   3. If a paragraph exceeds $limit, split on single newlines, then on spaces.
+     *   4. Words are never split mid-word. A single word longer than $limit
+     *      is force-split as a last resort.
+     *
+     * @param string $text  Caption text (may contain \n and \n\n).
+     * @param int    $limit Maximum UTF-8 characters per chunk.
      * @return string[]
      */
     public static function split_caption_into_chunks(string $text, int $limit): array {
         $text = trim((string) $text);
         if ($text === '') { return array(); }
-        if ($limit <= 0) { return array($text); }
+        if ($limit <= 0)  { return array($text); }
 
-        $words = preg_split('/\s+/u', $text);
-        $chunks = array();
+        $text = str_replace(array("\r\n", "\r"), "\n", $text);
+
+        $chunks  = array();
         $current = '';
 
-        foreach ($words as $w) {
-            $append = $current === '' ? $w : (' ' . $w);
-            if (mb_strlen($current . $append, 'UTF-8') > $limit) {
-                if ($current !== '') { $chunks[] = $current; }
-                // If single word longer than limit, force-split it.
-                if (mb_strlen($w, 'UTF-8') > $limit) {
-                    $start = 0;
-                    $len = mb_strlen($w, 'UTF-8');
-                    while ($start < $len) {
-                        $chunks[] = mb_substr($w, $start, $limit, 'UTF-8');
-                        $start += $limit;
-                    }
-                    $current = '';
+        $paragraphs = preg_split('/\n{2,}/u', $text);
+
+        foreach ($paragraphs as $paragraph) {
+            $para_len = mb_strlen($paragraph, 'UTF-8');
+
+            if ($para_len <= $limit) {
+                $candidate = $current === '' ? $paragraph : ($current . "\n\n" . $paragraph);
+                if (mb_strlen($candidate, 'UTF-8') <= $limit) {
+                    $current = $candidate;
                 } else {
-                    $current = $w;
+                    if ($current !== '') { $chunks[] = $current; }
+                    $current = $paragraph;
                 }
             } else {
-                $current .= $append;
+                if ($current !== '') { $chunks[] = $current; $current = ''; }
+
+                $lines = explode("\n", $paragraph);
+                foreach ($lines as $line) {
+                    $line_len = mb_strlen($line, 'UTF-8');
+
+                    if ($line_len <= $limit) {
+                        $candidate = $current === '' ? $line : ($current . "\n" . $line);
+                        if (mb_strlen($candidate, 'UTF-8') <= $limit) {
+                            $current = $candidate;
+                        } else {
+                            if ($current !== '') { $chunks[] = $current; }
+                            $current = $line;
+                        }
+                    } else {
+                        if ($current !== '') { $chunks[] = $current; $current = ''; }
+
+                        $words = explode(' ', $line);
+                        foreach ($words as $word) {
+                            if ($word === '') { continue; }
+                            $word_len  = mb_strlen($word, 'UTF-8');
+                            $candidate = $current === '' ? $word : ($current . ' ' . $word);
+
+                            if (mb_strlen($candidate, 'UTF-8') <= $limit) {
+                                $current = $candidate;
+                            } else {
+                                if ($current !== '') { $chunks[] = $current; }
+                                if ($word_len <= $limit) {
+                                    $current = $word;
+                                } else {
+                                    $start = 0;
+                                    while ($start < $word_len) {
+                                        $chunks[] = mb_substr($word, $start, $limit, 'UTF-8');
+                                        $start += $limit;
+                                    }
+                                    $current = '';
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
+
         if ($current !== '') { $chunks[] = $current; }
+
         return $chunks;
     }
 
@@ -387,8 +654,6 @@ final class Publisher_Commons {
      * - If images >= chunks: distribute as evenly as possible
      * - If images < chunks: assign one image per chunk cycling through images
      * - Cap images per chunk to $max_per_chunk
-     *
-     * Returns array with $num_chunks elements, each an array of image URLs.
      *
      * @param string[] $images
      * @param int $num_chunks
@@ -416,7 +681,6 @@ final class Publisher_Commons {
             return $result;
         }
 
-        // total < num_chunks: assign one image per chunk cycling through images
         for ($i = 0; $i < $num_chunks; $i++) {
             $img = $images[$i % $total] ?? null;
             if ($img !== null) { $result[$i][] = $img; }
@@ -424,58 +688,4 @@ final class Publisher_Commons {
 
         return $result;
     }
-
-    /**
-     * Build a thread payload array from a post when caption exceeds limit.
-     * Returns null if no thread should be created (e.g., NSFW for threads,
-     * or caption does not exceed the given limit).
-     *
-     * Options:
-     *  - 'caption' => string (required) full caption (with link/hashtags)
-     *  - 'images' => array of image URLs (optional)
-     *  - 'limit' => int character limit per element
-     *  - 'max_per_element' => int max images per element
-     *  - 'nsfw' => bool
-     *
-     * @param WP_Post $post
-     * @param array $cfg
-     * @param string $service 'twitter'|'threads'
-     * @param array $options
-     * @return array|null
-     */
-    public static function build_thread_payload(WP_Post $post, array $cfg, string $service, array $options = array(), float $margin = 0.05): ?array {
-        $caption = (string) ($options['caption'] ?? '');
-        $images = is_array($options['images']) ? $options['images'] : array();
-        $limit = isset($options['limit']) ? (int) $options['limit'] : 280;
-        $max_per_element = isset($options['max_per_element']) ? (int) $options['max_per_element'] : 4;
-        $nsfw = ! empty($options['nsfw']);
-
-        $svc = strtolower((string) $service);
-
-        if ($svc === 'threads' && $nsfw) {
-            // Threads must not create social_post thread when NSFW.
-            return null;
-        }
-
-        if (mb_strlen($caption, 'UTF-8') <= $limit) { return null; }
-
-        $effective_limit = max(1, (int) floor($limit * (1 - $margin)));
-
-        $parts = self::split_caption_into_chunks($caption, $effective_limit);
-        if (empty($parts)) { return null; }
-
-        $distributed = self::distribute_images_across_chunks($images, count($parts), $max_per_element);
-
-        $thread = array();
-        foreach ($parts as $i => $text) {
-            $assets = array();
-            foreach ($distributed[$i] ?? array() as $url) {
-                $assets[] = array('image' => array('url' => $url));
-            }
-            $thread[] = array('text' => $text, 'assets' => $assets);
-        }
-
-        return $thread;
-    }
-
 }

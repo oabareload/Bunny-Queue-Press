@@ -13,7 +13,7 @@
  * =========================================================================
  *
  *   User preferences (stored in wp_options, editable via UI):
- *     enabled, content_source, image_source, premium_account, post_style
+ *     enabled, premium_account, post_style
  *
  *   Provider rules (internal constants, never stored, never editable):
  *     max_images, character limits, max_thread_posts
@@ -23,56 +23,56 @@
  * User-configurable fields per service
  * =========================================================================
  *
- *   instagram : enabled, content_source, image_source
- *   twitter   : enabled, content_source, premium_account, post_style
- *   threads   : enabled, content_source, post_style
+ *   instagram : enabled
+ *   twitter   : enabled, premium_account, post_style
+ *   threads   : enabled, post_style
  *   (others)  : enabled only
- *
- * =========================================================================
- * content_source semantics (consumed by Sprint 3 publisher)
- * =========================================================================
- *
- *   'excerpt'   → Publish using the post excerpt as the body text.
- *                 Produces a short, single publication.
- *   'full_post' → Publish using the full post content.
- *                 Sprint 3 will decide whether it fits in a single post
- *                 or requires automatic thread splitting based on platform limits.
  *
  * =========================================================================
  * post_style semantics (consumed by Sprint 3 publisher) — Twitter & Threads only
  * =========================================================================
  *
  *   'social_post' → Standard content-based publication.
- *                   When content_source is 'full_post', Sprint 3 may automatically
- *                   split the content into a thread if it exceeds the platform limit.
- *   'card_link'   → Traffic-oriented publication. Uses title + reduced text + URL +
- *                   thumbnail. Never generates a thread. Text is always trimmed to
- *                   fit within the platform character limit.
+ *                   The system assembles the caption from the post excerpt
+ *                   (first element of the thread) and the full post content
+ *                   (subsequent elements), automatically splitting into a
+ *                   thread when the body exceeds the platform limit.
+ *   'card_link'   → Traffic-oriented publication. Uses the post excerpt as
+ *                   the body, the post URL as the link, the SEO title when
+ *                   available, and the post thumbnail. Never generates a
+ *                   thread. Text is always trimmed to fit within the
+ *                   platform character limit.
  *
  * =========================================================================
- * image_source semantics (Instagram only)
+ * Content & image source — internal system rules (NOT configurable)
  * =========================================================================
  *
- *   'featured_only'         → Publish only the post's featured image.
- *   'featured_plus_gallery' → Publish the featured image first, then gallery images
- *                             in order, respecting the platform max_images limit.
+ *   Content source:
+ *     - Card Link             → excerpt
+ *     - Social Post (all)     → excerpt + full_post
+ *     - Twitter/Threads hilo  → element 0 = excerpt (+ permalink + hashtags);
+ *                               elements 1..N = full_post (no permalink,
+ *                               no hashtags, no title).
+ *
+ *   Image source:
+ *     - Instagram SFW         → featured + gallery
+ *     - Instagram NSFW        → featured only
+ *     - Twitter               → featured + gallery (NSFW does NOT restrict)
+ *     - Threads SFW           → featured + gallery
+ *     - Threads NSFW          → forced to Card Link → featured only
+ *
+ *   These rules are enforced by the publishers, not by configuration.
+ *   No UI toggle should ever expose content_source / image_source /
+ *   NSFW handling to the user.
  *
  * =========================================================================
- * NSFW rules — FUTURE (not yet implemented, not yet configurable)
+ * Legacy migration
  * =========================================================================
  *
- *   Instagram:
- *     If the post carries an NSFW tag, ignore gallery images regardless of
- *     image_source setting. Publish only the featured image.
- *
- *   Threads:
- *     Same as Instagram — NSFW posts always use featured image only.
- *
- *   Twitter (X):
- *     No automatic restriction on NSFW content. Publish according to normal rules.
- *
- *   Implementation note: these rules will be enforced in Sprint 3 by the publisher,
- *   not by configuration. No UI toggle should ever expose NSFW handling to the user.
+ *   `content_source` and `image_source` were removed from the user-
+ *   configurable schema. migrate_legacy_config() runs once on the first
+ *   load with the new version (gated by a stored schema version flag) and
+ *   strips those keys from the persisted option.
  *
  * @package QueuePostScheduler\Buffer
  */
@@ -96,25 +96,19 @@ final class Channel_Config {
 	public const OPTION_KEY = 'wp_queuepress_channel_config';
 
 	/**
-	 * Valid values for the content_source field.
+	 * Option key for the persisted schema version (used to gate migrations).
 	 */
-	private const CONTENT_SOURCE_OPTIONS = array(
-		'excerpt',
-		'full_post',
-	);
+	public const SCHEMA_VERSION_OPTION = 'wp_queuepress_channel_config_schema_version';
 
 	/**
-	 * Valid values for the image_source field (Instagram only).
+	 * Current schema version. Bump whenever the persisted shape changes.
 	 */
-	private const IMAGE_SOURCE_OPTIONS = array(
-		'featured_only',
-		'featured_plus_gallery',
-	);
+	public const CURRENT_SCHEMA_VERSION = 2;
 
 	/**
 	 * Valid values for the post_style field (Twitter and Threads only).
 	 *
-	 * 'social_post' → standard content-based publication; Sprint 3 may auto-thread.
+	 * 'social_post' → standard content-based publication; the system may auto-thread.
 	 * 'card_link'   → traffic-oriented; never threads; always trims to platform limit.
 	 */
 	private const POST_STYLE_OPTIONS = array(
@@ -198,38 +192,6 @@ final class Channel_Config {
 	 * @return array<string, array<string, mixed>>
 	 */
 	public function fields_for(string $service): array {
-		$content_source_field = array(
-			'content_source' => array(
-				'type'        => 'select',
-				'label'       => __('Content source', 'wp-queuepress'),
-				'description' => __('Determines which part of the post is used as the publication body.', 'wp-queuepress'),
-				'options'     => array(
-					'excerpt'   => __('Excerpt', 'wp-queuepress'),
-					'full_post' => __('Full post', 'wp-queuepress'),
-				),
-				'option_descriptions' => array(
-					'excerpt'   => __('Publishes using the post excerpt. Always produces a single, short publication.', 'wp-queuepress'),
-					'full_post' => __('Publishes the full post content. The system will split it automatically if needed.', 'wp-queuepress'),
-				),
-			),
-		);
-
-		$image_source_field = array(
-			'image_source' => array(
-				'type'        => 'select',
-				'label'       => __('Image source', 'wp-queuepress'),
-				'description' => __('Controls which images are attached to the publication.', 'wp-queuepress'),
-				'options'     => array(
-					'featured_only'         => __('Featured only', 'wp-queuepress'),
-					'featured_plus_gallery' => __('Featured + gallery', 'wp-queuepress'),
-				),
-				'option_descriptions' => array(
-					'featured_only'         => __('Publishes only the featured image.', 'wp-queuepress'),
-					'featured_plus_gallery' => __('Publishes the featured image first, followed by gallery images in order, up to the platform image limit.', 'wp-queuepress'),
-				),
-			),
-		);
-
 		$post_style_field = array(
 			'post_style' => array(
 				'type'        => 'select',
@@ -240,8 +202,8 @@ final class Channel_Config {
 					'card_link'   => __('Card link', 'wp-queuepress'),
 				),
 				'option_descriptions' => array(
-					'social_post' => __('Standard content-based publication. If the content is long, it may be automatically split into a thread.', 'wp-queuepress'),
-					'card_link'   => __('Traffic-oriented publication using title, short text, URL, and thumbnail. Never generates a thread. Text is trimmed to fit platform limits.', 'wp-queuepress'),
+					'social_post' => __('Standard content-based publication. The system uses the post excerpt as an introduction and the full post content as the body, splitting it into a thread when needed.', 'wp-queuepress'),
+					'card_link'   => __('Traffic-oriented publication. Uses the post excerpt as the body, the post URL as the link, the SEO title when available, and the post thumbnail. Never generates a thread.', 'wp-queuepress'),
 				),
 			),
 		);
@@ -256,26 +218,18 @@ final class Channel_Config {
 
 		switch ($service) {
 			case 'instagram':
-				// post_style is NOT available for Instagram.
-				// Instagram publications are always content-based; style is
-				// determined by image_source and platform constraints.
-				return array_merge(
-					$content_source_field,
-					$image_source_field
-				);
+				// Instagram has no user-configurable fields beyond enabled.
+				// Content and image sources are determined by system rules.
+				return array();
 
 			case 'twitter':
 				return array_merge(
-					$content_source_field,
 					$premium_account_field,
 					$post_style_field
 				);
 
 			case 'threads':
-				return array_merge(
-					$content_source_field,
-					$post_style_field
-				);
+				return $post_style_field;
 
 			default:
 				return array();
@@ -370,28 +324,65 @@ final class Channel_Config {
 
 		switch ($service) {
 			case 'instagram':
-				// No post_style for Instagram.
-				return array_merge($base, array(
-					'content_source' => 'excerpt',
-					'image_source'   => 'featured_only',
-				));
+				// No user-configurable fields for Instagram.
+				return $base;
 
 			case 'twitter':
 				return array_merge($base, array(
-					'content_source'  => 'excerpt',
 					'premium_account' => false,
 					'post_style'      => 'social_post',
 				));
 
 			case 'threads':
 				return array_merge($base, array(
-					'content_source' => 'excerpt',
-					'post_style'     => 'social_post',
+					'post_style' => 'social_post',
 				));
 
 			default:
 				return $base;
 		}
+	}
+
+	/**
+	 * Migrates the persisted option from an older schema to the current one.
+	 *
+	 * Currently performs one migration (schema v1 → v2):
+	 *   - Strips `content_source` and `image_source` from every channel entry.
+	 *     Both are now system rules, not user preferences.
+	 *
+	 * The migration is gated by the persisted schema version flag; it runs
+	 * at most once per upgrade.
+	 *
+	 * @return bool True if a migration was executed, false if already up to date.
+	 */
+	public function migrate_legacy_config(): bool {
+		$current = (int) get_option(self::SCHEMA_VERSION_OPTION, 1);
+
+		if ($current >= self::CURRENT_SCHEMA_VERSION) {
+			return false;
+		}
+
+		$all = $this->get_all();
+		$changed = false;
+
+		foreach ($all as $channel_id => $cfg) {
+			if (! is_array($cfg)) {
+				continue;
+			}
+			if (array_key_exists('content_source', $cfg) || array_key_exists('image_source', $cfg)) {
+				unset($cfg['content_source'], $cfg['image_source']);
+				$all[$channel_id] = $cfg;
+				$changed = true;
+			}
+		}
+
+		if ($changed) {
+			update_option(self::OPTION_KEY, $all);
+		}
+
+		update_option(self::SCHEMA_VERSION_OPTION, self::CURRENT_SCHEMA_VERSION, false);
+
+		return $changed;
 	}
 
 	// -------------------------------------------------------------------------
@@ -415,22 +406,6 @@ final class Channel_Config {
 			'service'  => sanitize_key($service),
 			'enabled'  => ! empty($raw['enabled']),
 		);
-
-		// content_source — all supported services.
-		if (isset($defaults['content_source'])) {
-			$val                   = isset($raw['content_source']) ? sanitize_key($raw['content_source']) : '';
-			$out['content_source'] = in_array($val, self::CONTENT_SOURCE_OPTIONS, true)
-				? $val
-				: $defaults['content_source'];
-		}
-
-		// image_source — Instagram only.
-		if (isset($defaults['image_source'])) {
-			$val               = isset($raw['image_source']) ? sanitize_key($raw['image_source']) : '';
-			$out['image_source'] = in_array($val, self::IMAGE_SOURCE_OPTIONS, true)
-				? $val
-				: $defaults['image_source'];
-		}
 
 		// premium_account — Twitter only.
 		if (isset($defaults['premium_account'])) {

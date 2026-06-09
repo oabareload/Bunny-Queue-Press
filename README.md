@@ -48,6 +48,26 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 - **Settings** — plugin preferences and queue assignment controls
 
 ## Changelog
+### 2.1.0
+
+- **Pipeline UI Refresh:**
+  - Moved the per-post action menu from the card header onto the post thumbnail (top-right overlay).
+  - Replaced the legacy Unicode ✓ indicator with a per-platform status strip (Buffer, X/Twitter, Threads, Instagram) rendered as inline SVG icons with `fill="currentColor"`.
+  - Added per-platform state modifiers (`qps-platform--idle | --success | --scheduled | --pending | --error`) with dedicated tooltips (platform name, state, sent-at timestamp).
+  - Introduced a placeholder state for posts without a featured image so the card keeps a consistent 140×140 footprint and the action menu remains usable.
+  - Tightened thumbnail and strip dimensions (miniature 140×140, icon 14×14, gap 1px, strip capped at ~55% of the image width) to make the strip a discreet indicator rather than a dominant element.
+  - Derived platform state exclusively from the real persisted Buffer record (`post_id` + `sent_at`), preventing “Not Sent” tooltip mismatches when legacy or empty meta rows exist.
+  - Cleaned up legacy selectors (`.qps-buffer-indicator`, `.qps-action-menu*`) and the `get_buffer_channel_entry()` helper, which were superseded by the new `resolve_platform_state()` resolver.
+
+- **Content publishing improvements:**
+  - Titles now pass through `html_entity_decode(..., ENT_QUOTES | ENT_HTML5, 'UTF-8')` so entities like `&#8211;` and `&#8217;` render as real Unicode characters.
+  - The system no longer extracts, rebuilds, or appends a hashtags block. Hashtags stay exactly where the author wrote them in the content; truncation is accepted as a natural consequence of the platform limit.
+  - Instagram Social Post caption now follows the exact order: excerpt + title + full post + permalink (no rebuilt hashtag block).
+  - Twitter and Threads Social Post threads use the new model: element 0 = excerpt + permalink, element 1 = title + first body chunk, elements 2..N = remaining body chunks (no duplicated title, no duplicated hashtags, no duplicated permalink).
+  - `force_source => 'excerpt'` now always reads `post_excerpt` regardless of whether the post uses Gutenberg blocks.
+  - The `prepend_content` path runs through `strip_tags_preserve_breaks()` so pre-built blocks no longer leak raw HTML or HTML entities into the final caption.
+  - `build_thread_payload()` was removed because it has no remaining callers; `split_caption_into_chunks()` and `distribute_images_across_chunks()` remain as reusable primitives.
+
 ### 2.0.0
 
 - **Major release — Full Buffer integration:**

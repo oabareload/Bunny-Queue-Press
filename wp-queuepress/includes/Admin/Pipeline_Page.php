@@ -23,6 +23,7 @@ if (! defined('ABSPATH')) {
  * Renders the editorial pipeline overview.
  */
 final class Pipeline_Page {
+
 	/**
 	 * Post retrieval service.
 	 *
@@ -81,7 +82,6 @@ final class Pipeline_Page {
 			$now
 		);
 		$scheduled_posts = $this->post_query->get_posts_between('future', $now, $future_window);
-		// Fetch published posts with newest first (post_date DESC) for the Published column.
 		$published_query = new \WP_Query(
 			array(
 				'post_type'              => 'post',
@@ -104,8 +104,8 @@ final class Pipeline_Page {
 			)
 		);
 
-		$published_posts = $published_query->posts;
-		$draft_groups    = $this->group_posts_by_day($future_drafts, $timezone);
+		$published_posts  = $published_query->posts;
+		$draft_groups     = $this->group_posts_by_day($future_drafts, $timezone);
 		$scheduled_groups = $this->group_posts_by_day($scheduled_posts, $timezone);
 		$published_groups = $this->group_posts_by_day($published_posts, $timezone);
 		?>
@@ -227,9 +227,11 @@ final class Pipeline_Page {
 	/**
 	 * Renders a set of compact horizontal post cards.
 	 *
-	 * Each card has an action menu (⋮) with a "Send to Buffer" option.
-	 * The ⋮ button is always active — sending to Buffer again simply
-	 * overwrites the previous record for that channel.
+	 * Each card has:
+	 *   - An action menu (⋮) overlaid on the post thumbnail (top-right).
+	 *   - A platform status strip (bottom-left of the image) showing the state
+	 *     of Buffer / Twitter / Threads / Instagram for the post.
+	 *   - A feedback row below the card (populated by JS) for ephemeral messages.
 	 *
 	 * @param array<int,\WP_Post> $posts Posts to render.
 	 * @param DateTimeZone        $timezone Site timezone.
@@ -238,20 +240,105 @@ final class Pipeline_Page {
 	 */
 	private function render_post_cards(array $posts, DateTimeZone $timezone, bool $show_time): void {
 		foreach ($posts as $post) {
-			$post_time    = new DateTimeImmutable($post->post_date, $timezone);
-			$edit_url     = get_edit_post_link($post->ID);
-			$title        = get_the_title($post) ?: __('(no title)', 'wp-queuepress');
-			$status       = $this->get_post_status_label($post->post_status);
-			$thumbnail    = get_the_post_thumbnail_url($post, array(120, 120));
-			$buffer_entry = $this->get_buffer_channel_entry($post->ID);
+			$post_time     = new DateTimeImmutable($post->post_date, $timezone);
+			$edit_url      = get_edit_post_link($post->ID);
+			$title         = get_the_title($post) ?: __('(no title)', 'wp-queuepress');
+			$status        = $this->get_post_status_label($post->post_status);
+			$thumbnail     = get_the_post_thumbnail_url($post, array(180, 180));
+			$channels_meta = get_post_meta($post->ID, Buffer_Ajax::META_KEY, true);
+			if (! is_array($channels_meta)) { $channels_meta = array(); }
+
+			// Build a per-service lookup: [service_slug => entry]
+			$by_service = array();
+			foreach ($channels_meta as $cid => $entry) {
+				if (! is_array($entry)) { continue; }
+				$svc = isset($entry['service']) ? (string) $entry['service'] : '';
+				if ($svc !== '') { $by_service[$svc] = $entry; }
+			}
+
+			// Whether the post actually has a real Buffer publication record.
+			// An entry is only "real" if it has both a buffer post_id AND a sent_at.
+			// This filters out legacy/empty/test rows that may exist from old
+			// versions of the plugin or incomplete migrations.
+			$has_real_record = static function (array $entry): bool {
+				$post_id = isset($entry['post_id']) ? (string) $entry['post_id'] : '';
+				$sent_at = isset($entry['sent_at']) ? (string) $entry['sent_at'] : '';
+				return ($post_id !== '' && $sent_at !== '');
+			};
 			?>
 			<li class="qps-card">
 				<div class="qps-card-inner">
-					<?php if ($thumbnail) : ?>
-						<div class="qps-card-image">
+					<div class="qps-card-image<?php echo $thumbnail ? '' : ' qps-card-image--placeholder'; ?>">
+						<?php if ($thumbnail) : ?>
 							<img src="<?php echo esc_url($thumbnail); ?>" alt="<?php echo esc_attr($title); ?>" />
-						</div>
-					<?php endif; ?>
+						<?php else : ?>
+							<span class="qps-card-image-placeholder" aria-hidden="true"><?php echo $this->render_icon('image'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+						<?php endif; ?>
+
+						<!-- Action menu overlay (top-right of the image) -->
+						<div class="qps-image-menu">
+							<button
+								type="button"
+								class="qps-image-menu-toggle"
+								aria-label="<?php esc_attr_e('Post actions', 'wp-queuepress'); ?>"
+								aria-haspopup="true"
+								aria-expanded="false"
+							><?php echo $this->render_icon('more'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG markup, controlled output. ?></button>
+							<ul class="qps-image-menu-list" role="menu" hidden>
+								<li role="none">
+									<button
+										type="button"
+										role="menuitem"
+										class="qps-send-to-buffer"
+										data-post-id="<?php echo esc_attr((string) $post->ID); ?>"
+										data-nonce="<?php echo esc_attr(wp_create_nonce(Buffer_Ajax::nonce_action($post->ID))); ?>"
+									>
+										<?php echo $this->render_icon('buffer'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+										<span><?php esc_html_e('Send to Buffer', 'wp-queuepress'); ?></span>
+									</button>
+								</li>
+							</ul>
+						</div><!-- .qps-image-menu -->
+
+						<!-- Platform status strip (bottom-left of the image) -->
+						<div class="qps-platform-strip" aria-label="<?php esc_attr_e('Per-platform status', 'wp-queuepress'); ?>">
+							<?php
+							$platforms = array(
+								'buffer'    => 'buffer',
+								'twitter'   => 'x',
+								'threads'   => 'threads',
+								'instagram' => 'instagram',
+							);
+							$platform_labels = array(
+								'buffer'    => __('Buffer', 'wp-queuepress'),
+								'twitter'   => __('X / Twitter', 'wp-queuepress'),
+								'threads'   => __('Threads', 'wp-queuepress'),
+								'instagram' => __('Instagram', 'wp-queuepress'),
+							);
+							foreach ($platforms as $service_slug => $icon_key) :
+								$entry = isset($by_service[$service_slug]) ? $by_service[$service_slug] : null;
+								$state_modifier = 'qps-platform--idle';
+								$state_label    = __('Not sent', 'wp-queuepress');
+								$tooltip_date   = '';
+								if (is_array($entry) && $has_real_record($entry)) {
+									$resolved = $this->resolve_platform_state($entry);
+									$state_modifier = $resolved['modifier'];
+									$state_label    = $resolved['label'];
+									$tooltip_date   = $resolved['date'];
+								}
+								$tooltip = $platform_labels[$service_slug] . "\n" . $state_label;
+								if ($tooltip_date !== '') {
+									$tooltip .= "\n" . $tooltip_date;
+								}
+								?>
+								<span
+									class="qps-platform <?php echo esc_attr($state_modifier); ?>"
+									data-service="<?php echo esc_attr($service_slug); ?>"
+									title="<?php echo esc_attr($tooltip); ?>"
+								><?php echo $this->render_icon($icon_key); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+							<?php endforeach; ?>
+						</div><!-- .qps-platform-strip -->
+					</div>
 					<div class="qps-card-body">
 						<div class="qps-card-header-row">
 							<?php if ($edit_url) : ?>
@@ -261,36 +348,6 @@ final class Pipeline_Page {
 							<?php else : ?>
 								<span class="qps-card-title-link"><?php echo esc_html($title); ?></span>
 							<?php endif; ?>
-							<div class="qps-card-actions">
-								<?php if ($buffer_entry) : ?>
-									<span class="qps-buffer-indicator" title="<?php echo esc_attr(
-										sprintf(
-											/* translators: %s: sent datetime */
-											__('Sent to Buffer on %s', 'wp-queuepress'),
-											$buffer_entry['sent_at']
-										)
-									); ?>">&#10003;</span>
-								<?php endif; ?>
-								<div class="qps-action-menu">
-									<button
-										type="button"
-										class="qps-action-menu-toggle"
-										aria-label="<?php esc_attr_e('Post actions', 'wp-queuepress'); ?>"
-										aria-expanded="false"
-									>&#8942;</button>
-									<ul class="qps-action-menu-list" role="menu" hidden>
-										<li role="none">
-											<button
-												type="button"
-												role="menuitem"
-												class="qps-send-to-buffer"
-												data-post-id="<?php echo esc_attr((string) $post->ID); ?>"
-												data-nonce="<?php echo esc_attr(wp_create_nonce(Buffer_Ajax::nonce_action($post->ID))); ?>"
-											><?php esc_html_e('Send to Buffer', 'wp-queuepress'); ?></button>
-										</li>
-									</ul>
-								</div><!-- .qps-action-menu -->
-							</div><!-- .qps-card-actions -->
 						</div><!-- .qps-card-header-row -->
 						<div class="qps-card-meta">
 							<?php if ($show_time) : ?>
@@ -300,7 +357,7 @@ final class Pipeline_Page {
 						</div><!-- .qps-card-meta -->
 					</div><!-- .qps-card-body -->
 				</div><!-- .qps-card-inner -->
-				<!-- Inline feedback (populated by JS) -->
+				<!-- Inline feedback (populated by JS, ephemeral messages only) -->
 				<div class="qps-card-feedback" aria-live="polite"></div>
 			</li>
 			<?php
@@ -308,26 +365,121 @@ final class Pipeline_Page {
 	}
 
 	/**
-	 * Returns the most recent Buffer channel entry for a post, or null.
+	 * Renders an inline SVG icon by key.
 	 *
-	 * Reads _queuepress_buffer_channels and returns the first entry found.
-	 * In Sprint 3.0 only one channel (Instagram) is used. In Sprint 3.1+
-	 * this can be extended to return entries per channel_id.
+	 * All icons use fill="currentColor" so callers can control color via CSS.
+	 * Recognized keys: more, buffer, x, threads, instagram.
 	 *
-	 * @param int $post_id WordPress post ID.
-	 * @return array<string, mixed>|null
+	 * @param string $key Icon key.
+	 * @return string SVG markup.
 	 */
-	private function get_buffer_channel_entry(int $post_id): ?array {
-		$channels = get_post_meta($post_id, Buffer_Ajax::META_KEY, true);
+	private function render_icon(string $key): string {
+		switch ($key) {
+			case 'more':
+				return '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+					. '<circle cx="12" cy="5"  r="1.8" fill="currentColor"/>'
+					. '<circle cx="12" cy="12" r="1.8" fill="currentColor"/>'
+					. '<circle cx="12" cy="19" r="1.8" fill="currentColor"/>'
+					. '</svg>';
 
-		if (! is_array($channels) || empty($channels)) {
-			return null;
+			case 'buffer':
+				return '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+					. '<rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="2"/>'
+					. '<text x="12" y="16" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="700" fill="currentColor">b</text>'
+					. '</svg>';
+
+			case 'x':
+				return '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+					. '<path fill="currentColor" d="M17.53 3H20.5l-6.49 7.42L21.75 21h-6.06l-4.75-6.21L5.5 21H2.52l6.95-7.95L2.25 3h6.21l4.29 5.67L17.53 3zm-1.06 16.5h1.64L7.62 4.4H5.86L16.47 19.5z"/>'
+					. '</svg>';
+
+			case 'threads':
+				return '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+					. '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M16 8c-1.5-2-4-2.5-6-1.5-2 1-3 3-3 5.5s1 4.5 3 5.5 4.5.5 6-1.5c1-1.4 1-3.2 0-4.5-1-1.4-3-2-5-1.5"/>'
+					. '<circle cx="12" cy="12" r="1.3" fill="currentColor"/>'
+					. '</svg>';
+
+			case 'instagram':
+				return '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+					. '<rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/>'
+					. '<circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/>'
+					. '<circle cx="17.5" cy="6.5" r="1.1" fill="currentColor"/>'
+					. '</svg>';
+
+			case 'image':
+				// Placeholder icon for posts without a featured image.
+				return '<svg class="qps-icon qps-icon--lg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+					. '<rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/>'
+					. '<circle cx="9" cy="10" r="1.5" fill="currentColor"/>'
+					. '<path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M4 18l5-5 4 4 3-3 4 4"/>'
+					. '</svg>';
+
+			default:
+				return '';
+		}
+	}
+
+	/**
+	 * Resolves the platform state from a Buffer channel entry.
+	 *
+	 * Applies the precedence hierarchy:
+	 *   success > scheduled > pending > error > idle
+	 *
+	 * The state is derived only from the data actually stored in the
+	 * entry (`status`, `post_id`, `sent_at`). Entries without both a
+	 * `post_id` and a `sent_at` are treated as "not sent" upstream and
+	 * never reach this function (the caller filters them out).
+	 *
+	 * @param array<string, mixed> $entry One Buffer channel entry.
+	 * @return array{modifier: string, label: string, date: string}
+	 */
+	private function resolve_platform_state(array $entry): array {
+		$raw_status = isset($entry['status']) ? strtolower(trim((string) $entry['status'])) : '';
+		$sent_at    = isset($entry['sent_at']) ? (string) $entry['sent_at'] : '';
+
+		// Pending states (queue / processing).
+		if (in_array($raw_status, array('pending', 'queued', 'processing', 'in_progress'), true)) {
+			return array(
+				'modifier' => 'qps-platform--pending',
+				'label'    => __('Pending', 'wp-queuepress'),
+				'date'     => $sent_at,
+			);
 		}
 
-		// Return the first entry — keyed by channel_id.
-		$entry = reset($channels);
+		// Error states.
+		if (in_array($raw_status, array('error', 'failed', 'failure', 'cancelled', 'canceled'), true)) {
+			return array(
+				'modifier' => 'qps-platform--error',
+				'label'    => __('Error', 'wp-queuepress'),
+				'date'     => $sent_at,
+			);
+		}
 
-		return is_array($entry) ? $entry : null;
+		// Scheduled / queued for future publication.
+		if (in_array($raw_status, array('scheduled', 'queue', 'add_to_queue', 'added_to_queue'), true)) {
+			return array(
+				'modifier' => 'qps-platform--scheduled',
+				'label'    => __('Scheduled', 'wp-queuepress'),
+				'date'     => $sent_at,
+			);
+		}
+
+		// Success states.
+		if (in_array($raw_status, array('sent', 'published', 'added', 'success', 'ok', 'live'), true)) {
+			return array(
+				'modifier' => 'qps-platform--success',
+				'label'    => __('Published', 'wp-queuepress'),
+				'date'     => $sent_at,
+			);
+		}
+
+		// Unknown / legacy status: if we have a real record (post_id + sent_at),
+		// show as success by default; otherwise idle.
+		return array(
+			'modifier' => 'qps-platform--success',
+			'label'    => __('Published', 'wp-queuepress'),
+			'date'     => $sent_at,
+		);
 	}
 
 	/**

@@ -262,7 +262,7 @@ GQL;
             return null;
         }
 
-        $url = (string) get_permalink($post);
+        $url = Publisher_Commons::get_pretty_post_url($post);
 
         $title = '';
         $seo_keys = array('_yoast_wpseo_title', '_aioseo_title', 'rank_math_title');

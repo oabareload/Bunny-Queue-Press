@@ -166,8 +166,9 @@ final class Buffer_Ajax {
 					$res = array('success' => false, 'message' => __('Unsupported channel service.', 'wp-queuepress'), 'channel_id' => $channel_id, 'service' => $service);
 			}
 
-			// Persist per-channel result if publisher returned channel_id.
-			if (isset($res['channel_id']) && ! empty($res['channel_id'])) {
+			// Persist per-channel result only when Buffer returned a post_id.
+			// This prevents overwriting existing records with failed attempts.
+			if (isset($res['channel_id']) && ! empty($res['channel_id']) && ! empty($res['post_id'])) {
 				$this->save_channel_record($post_id, $res);
 			}
 
