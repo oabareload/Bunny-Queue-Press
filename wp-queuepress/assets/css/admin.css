@@ -1357,12 +1357,11 @@ a.qps-card-title-link:hover {
 	color: rgba(255, 255, 255, 0.45);
 }
 
-.qps-platform--success {
+.qps-platform--success,
+.qps-platform--scheduled,
+.qps-platform--queued,
+.qps-platform--added_to_queue {
 	color: #46b450;
-}
-
-.qps-platform--scheduled {
-	color: #f0b400;
 }
 
 .qps-platform--pending {

@@ -108,7 +108,7 @@ final class Queue_Rebuilder {
         }
 
         $plan = array(
-            'version'    => '2.1.0',
+            'version'    => '2.1.1',
             'created_at' => (new DateTimeImmutable('now', wp_timezone()))->format(DATE_ATOM),
             'total'      => count($plan_items),
             'pointer'    => 0,

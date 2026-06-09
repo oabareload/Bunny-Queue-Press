@@ -147,9 +147,14 @@
 			var platform = strip.querySelector( '.qps-platform[data-service="' + service + '"]' );
 			if ( ! platform ) { return; }
 
-			platform.classList.remove( 'qps-platform--idle', 'qps-platform--success', 'qps-platform--error' );
+			platform.classList.remove( 'qps-platform--idle', 'qps-platform--success', 'qps-platform--error', 'qps-platform--scheduled', 'qps-platform--queued', 'qps-platform--added_to_queue' );
 			if ( r.success ) {
-				platform.classList.add( 'qps-platform--success' );
+				var statusClass = 'qps-platform--success';
+				var knownGreen = [ 'scheduled', 'queued', 'added_to_queue', 'success' ];
+				if ( r.status && knownGreen.indexOf( r.status.toLowerCase() ) !== -1 ) {
+					statusClass = 'qps-platform--' + r.status.toLowerCase();
+				}
+				platform.classList.add( statusClass );
 			} else {
 				platform.classList.add( 'qps-platform--error' );
 			}

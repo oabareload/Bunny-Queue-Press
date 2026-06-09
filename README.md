@@ -48,6 +48,26 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 - **Settings** — plugin preferences and queue assignment controls
 
 ## Changelog
+### 2.1.1
+
+**Twitter & Threads reliability fixes**
+
+- Fixed thread generation where the title was prepended after chunking, potentially producing thread items that exceeded platform character limits.
+- Thread chunking now operates on the complete content including the title, so `split_caption_into_chunks()` has full visibility of the space required from the start.
+- Added a final validation pass that re-splits any oversized chunk as a safety mechanism, covering edge cases not caught by the primary chunking logic.
+
+**Pipeline status improvements**
+
+- Buffer states `scheduled`, `queued`, `added_to_queue`, and `success` are now displayed as successful submissions in the platform status strip.
+- Platform indicators in the Pipeline now better reflect the real publication submission state returned by Buffer.
+- Removed the `--scheduled` yellow state; all confirmed submission states are green.
+
+**Stability**
+
+- Improved consistency between Twitter and Threads publishing flows.
+- Production fixes based on real publishing failures.
+- Confirmed Instagram publisher does not use chunking and requires no changes.
+
 ### 2.1.0
 
 - **Pipeline UI Refresh:**

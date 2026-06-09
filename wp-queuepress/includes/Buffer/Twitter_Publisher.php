@@ -197,10 +197,10 @@ final class Twitter_Publisher {
             )
         );
 
-        // 2. Body: full_post pure content (no title, no permalink, no appended
-        //    hashtags). Build at PHP_INT_MAX to capture the full text, then
-        //    prepend the decoded title to the FIRST chunk so the title appears
-        //    exactly once, in the second post of the thread.
+        // 2. Body: full_post pure content (no title, no permalink).
+        // Prepend the decoded title to the body text BEFORE chunking so
+        // split_caption_into_chunks has visibility of the full space required
+        // and the first chunk never exceeds the limit after the title is added.
         $full_post_text = Publisher_Commons::build_caption(
             $post,
             $cfg,
@@ -212,17 +212,29 @@ final class Twitter_Publisher {
             )
         );
 
+        $title = html_entity_decode((string) get_the_title($post), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $full_post_with_title = trim($title) . "\n\n" . $full_post_text;
+
         $effective_limit = max(1, (int) floor($limit * (1 - 0.10)));
-        $body_chunks = Publisher_Commons::split_caption_into_chunks($full_post_text, $effective_limit);
+        $body_chunks = Publisher_Commons::split_caption_into_chunks($full_post_with_title, $effective_limit);
 
-        // If we have any body chunks, prepend the decoded title to the first one.
-        if (! empty($body_chunks)) {
-            $title = html_entity_decode((string) get_the_title($post), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            $body_chunks[0] = trim($title) . "\n\n" . $body_chunks[0];
-        }
-
-        // 3. Assemble thread: intro first, then body chunks (or just intro if no body).
+        // 3. Assemble thread: intro first, then body chunks.
         $thread_texts = array_merge(array($intro), $body_chunks);
+
+        // 4. Guardia final: re-split any element that still exceeds the limit.
+        //    This covers edge cases where upstream logic produces an oversized
+        //    element (e.g. a very long title with no natural break point).
+        $validated = array();
+        foreach ($thread_texts as $element) {
+            if (mb_strlen($element, 'UTF-8') <= $effective_limit) {
+                $validated[] = $element;
+            } else {
+                foreach (Publisher_Commons::split_caption_into_chunks($element, $effective_limit) as $sub) {
+                    $validated[] = $sub;
+                }
+            }
+        }
+        $thread_texts = $validated;
 
         // 4. Gather images for the thread. Twitter does NOT restrict on NSFW.
         $max_images_entry = $service_limits['max_images'] ?? array('value' => 4);
