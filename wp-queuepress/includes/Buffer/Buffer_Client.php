@@ -320,29 +320,24 @@ final class Buffer_Client {
 			);
 		}
 		$mutation = sprintf(
-			'mutation { deletePost(input: { id: "%s" }) { id } }',
+			'mutation { deletePost(input: { id: "%s" }) { ... on DeletePostSuccess { post { id } } ... on MutationError { message } } }',
 			esc_js($post_id)
 		);
 		$response = $this->mutate($mutation);
 
 		$delete_post = $response['data']['deletePost'] ?? null;
-		if (is_array($delete_post) && isset($delete_post['id']) && (string) $delete_post['id'] !== '') {
+		// Success path: DeletePostSuccess resolves to { post: { id } }.
+		if (is_array($delete_post) && isset($delete_post['post']['id']) && (string) $delete_post['post']['id'] !== '') {
 			return array(
 				'success' => true,
-				'post_id' => (string) $delete_post['id'],
+				'post_id' => (string) $delete_post['post']['id'],
 			);
 		}
+		// Error path: MutationError resolves to { message }.
 		if (is_array($delete_post) && isset($delete_post['message'])) {
 			return array(
 				'success' => false,
 				'message' => (string) $delete_post['message'],
-			);
-		}
-		// MutationError inside data: try the legacy path.
-		if (isset($response['data']['message'])) {
-			return array(
-				'success' => false,
-				'message' => (string) $response['data']['message'],
 			);
 		}
 		return array(

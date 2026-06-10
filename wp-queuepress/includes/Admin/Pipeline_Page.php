@@ -10,6 +10,14 @@
  *     tooltip explaining why. The same check is enforced server-side.
  *   - Action menu exposes "View Post" and "Delete Buffer Posts".
  *
+ * 2.2.1 changes:
+ *   - Platform icons are now clickable whenever the platform has at least one
+ *     enabled channel, regardless of whether a Buffer record was previously
+ *     saved. This decouples UX from record existence so a failed/timed-out
+ *     send never leaves the user without a retry path.
+ *   - Icon aria-label adapts: "Send to X" (no record) vs "Re-send to X"
+ *     (confirmed record exists for that platform).
+ *
  * @package QueuePostScheduler\Admin
  */
 
@@ -20,6 +28,7 @@ namespace QueuePostScheduler\Admin;
 use DateTimeImmutable;
 use DateTimeZone;
 use QueuePostScheduler\Buffer\Buffer_Ajax;
+use QueuePostScheduler\Buffer\Channel_Config;
 use QueuePostScheduler\Buffer\Platform_Registry;
 use QueuePostScheduler\Schedule\Post_Query;
 use QueuePostScheduler\Settings\Preferences;
@@ -247,19 +256,25 @@ final class Pipeline_Page {
 	 * Each card has:
 	 *   - An action menu (⋮) overlaid on the post thumbnail (top-right).
 	 *   - A platform status strip (bottom-left of the image) showing the state
-	 *     of each registered platform for the post. Icons are clickable when
-	 *     a real publication record exists.
+	 *     of each registered platform for the post. Icons are rendered as
+	 *     clickable buttons whenever the platform has at least one enabled
+	 *     channel, regardless of whether a Buffer record exists.
 	 *   - A feedback row below the card (populated by JS) for ephemeral messages.
 	 *
 	 * The list of platforms is read from Platform_Registry — there is no
 	 * hardcoded list in this method.
 	 *
-	 * @param array<int,\WP_Post> $posts Posts to render.
-	 * @param DateTimeZone        $timezone Site timezone.
+	 * @param array<int,\WP_Post> $posts     Posts to render.
+	 * @param DateTimeZone        $timezone  Site timezone.
 	 * @param bool                $show_time Whether to show post time.
 	 * @return void
 	 */
 	private function render_post_cards(array $posts, DateTimeZone $timezone, bool $show_time): void {
+		// Determine which platform slugs have at least one enabled channel.
+		// This drives icon clickability independently of saved Buffer records.
+		$channel_config = new Channel_Config();
+		$active_slugs   = array_flip(Platform_Registry::active_slugs($channel_config));
+
 		foreach ($posts as $post) {
 			$post_time     = new DateTimeImmutable($post->post_date, $timezone);
 			$edit_url      = get_edit_post_link($post->ID);
@@ -366,7 +381,7 @@ final class Pipeline_Page {
 							<?php
 							// Render one icon per registered platform, in registry order.
 							foreach (Platform_Registry::all() as $slug => $def) :
-								$entry = isset($by_service[$slug]) ? $by_service[$slug] : null;
+								$entry          = isset($by_service[$slug]) ? $by_service[$slug] : null;
 								$state_modifier = 'qps-platform--idle';
 								$state_label    = __('Not sent', 'wp-queuepress');
 								$tooltip_date   = '';
@@ -379,23 +394,33 @@ final class Pipeline_Page {
 									$tooltip_date   = $resolved['date'];
 								}
 								$platform_label = Platform_Registry::label($slug);
-								$tooltip = $platform_label . "\n" . $state_label;
+								$tooltip        = $platform_label . "\n" . $state_label;
 								if ($tooltip_date !== '') {
 									$tooltip .= "\n" . $tooltip_date;
 								}
-								// Clickable when there is a real record — resend the single platform.
-								$clickable_class = $has_record ? ' qps-platform--clickable' : '';
-								$tag             = $has_record ? 'button' : 'span';
-								$extra_attrs     = $has_record
+								// Clickable whenever this platform has at least one enabled channel,
+								// regardless of whether a Buffer record was previously saved.
+								// Label adapts: "Send to X" (no record) vs "Re-send to X" (record exists).
+								$has_channel    = isset($active_slugs[$slug]);
+								$clickable_class = $has_channel ? ' qps-platform--clickable' : '';
+								$tag            = $has_channel ? 'button' : 'span';
+								$action_label   = $has_record
+									? sprintf(
+										/* translators: %s: platform name. */
+										__('Re-send to %s', 'wp-queuepress'),
+										$platform_label
+									)
+									: sprintf(
+										/* translators: %s: platform name. */
+										__('Send to %s', 'wp-queuepress'),
+										$platform_label
+									);
+								$extra_attrs = $has_channel
 									? ' type="button"'
 									  . ' data-post-id="' . esc_attr((string) $post->ID) . '"'
 									  . ' data-service="' . esc_attr($slug) . '"'
 									  . ' data-nonce="' . esc_attr(wp_create_nonce(Buffer_Ajax::nonce_action_service((int) $post->ID, $slug))) . '"'
-									  . ' aria-label="' . esc_attr(sprintf(
-										  /* translators: %s: platform name. */
-										  __('Resend to %s', 'wp-queuepress'),
-										  $platform_label
-									  )) . '"'
+									  . ' aria-label="' . esc_attr($action_label) . '"'
 									: '';
 								?>
 								<<?php echo $tag; ?>

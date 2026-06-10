@@ -1104,7 +1104,7 @@
 	line-height: 1.35;
 	min-width: 0;
 	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 3;
+	-webkit-line-clamp: 6;
 	overflow: hidden;
 	text-decoration: none;
 }

@@ -124,7 +124,11 @@ All of these were replaced by delegation to `Platform_Registry`. There are now z
 
 ### Per-platform resend
 
-Each platform icon in the Pipeline strip is clickable when a Buffer record exists for that channel. Clicking a platform icon sends the post to Buffer for that specific service only, without re-publishing to all connected channels.
+Each platform icon in the Pipeline strip is clickable whenever the platform has at least one enabled Buffer channel configured, regardless of whether a Buffer record was previously saved for that post. Clicking a platform icon sends the post to Buffer for that specific service only, without re-publishing to all connected channels.
+
+The icon label adapts based on whether a confirmed record exists:
+- **Send to X** — no prior record for that platform.
+- **Re-send to X** — a confirmed Buffer record already exists.
 
 The AJAX action `qps_send_to_buffer_service` accepts `post_id` and `service`, resolves the correct publisher from `Platform_Registry`, executes the publish, and updates the strip state in-place.
 
@@ -148,7 +152,9 @@ State is derived exclusively from the persisted `_queuepress_buffer_channels` me
 
 ### Dynamic platform strip
 
-The strip rendered beneath each card thumbnail is generated entirely from `Platform_Registry::all()`. The PHP template contains no platform names — only a `foreach` over the registry. Adding a new platform to the Registry causes it to appear automatically in every pipeline card for posts that have a channel record with that service slug.
+The strip rendered beneath each card thumbnail is generated entirely from `Platform_Registry::all()`. The PHP template contains no platform names — only a `foreach` over the registry. Adding a new platform to the Registry causes it to appear automatically in every pipeline card.
+
+Clickability is determined server-side at render time based on whether `Channel_Config` reports at least one enabled channel for the platform slug. No client-side DOM promotion of `<span>` elements to `<button>` elements occurs — the correct element type is always emitted from PHP.
 
 ---
 
@@ -219,6 +225,29 @@ On subsequent requests the guard condition (`$current >= CURRENT_SCHEMA_VERSION`
 ---
 
 ## Changelog
+
+### 2.2.1
+
+**Fixed**
+
+- Fixed Buffer `deletePost` GraphQL mutation compatibility. The mutation now uses inline fragments (`... on DeletePostSuccess { post { id } }` / `... on MutationError { message }`) matching the union return type in Buffer's schema. The prior `{ id }` selection on the root payload never resolved.
+- Fixed deletion of Buffer posts from the Pipeline UI as a direct consequence of the above.
+- Fixed platform actions becoming unavailable when Buffer returned an error despite receiving the publication. Platform icons are now always clickable when at least one enabled channel exists, so a failed or timed-out send never permanently locks the user out of retrying.
+- Fixed platform icon `qps-platform--clickable` being removed from the strip after a successful delete. Icons correctly retain their clickable state after a delete, since clickability depends on channel configuration, not on record existence.
+
+**Improved**
+
+- Platform icon clickability is now driven by enabled channel configuration (`Channel_Config` / `Platform_Registry`) rather than by the existence of a saved Buffer record. A platform is clickable as long as at least one enabled channel exists for that service.
+- Platform icons now show **Send to X** (no prior record) or **Re-send to X** (confirmed record exists), making the intended action unambiguous.
+- Removed obsolete span-to-button DOM promotion logic from `pipeline-buffer.js`. Clickable state is emitted server-side as a `<button>` element; no client-side element replacement is performed.
+- Improved consistency between `Platform_Registry`, `Pipeline_Page`, and `Buffer_Ajax`.
+
+**Architecture**
+
+- `Platform_Registry` remains the single source of truth for labels, icons, publisher classes, limits, defaults, and supported post styles.
+- `Channel_Config` delegates all platform-specific behavior to `Platform_Registry`.
+- `Buffer_Ajax` resolves publishers dynamically through `Platform_Registry`.
+- Pipeline platform strip is fully registry-driven; clickability is determined at render time from `Platform_Registry::active_slugs()`.
 
 ### 2.2.0
 

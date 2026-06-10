@@ -130,9 +130,6 @@
 				platform.classList.add( 'qps-platform--error' );
 			}
 
-			// If the platform was a plain span (idle) it is now a button after success.
-			platform.classList.add( 'qps-platform--clickable' );
-
 			// Update tooltip.
 			var label = ( service.charAt( 0 ).toUpperCase() + service.slice( 1 ) );
 			var lines = [ label, r.success ? ( i18n.published || 'Published' ) : ( i18n.error || 'Error' ) ];
@@ -160,7 +157,6 @@
 				'qps-platform--scheduled',
 				'qps-platform--queued',
 				'qps-platform--added_to_queue',
-				'qps-platform--clickable',
 				'qps-platform--busy'
 			);
 			p.classList.add( 'qps-platform--idle' );
