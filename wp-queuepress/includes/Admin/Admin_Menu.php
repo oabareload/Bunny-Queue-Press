@@ -199,11 +199,14 @@ final class Admin_Menu {
 					array(
 						'ajaxUrl' => admin_url('admin-ajax.php'),
 						'i18n'    => array(
-							'sending'      => __('Sending…', 'wp-queuepress'),
-							'sent'         => __('Sent', 'wp-queuepress'),
-							'error'        => __('Error sending to Buffer.', 'wp-queuepress'),
-							'networkError' => __('Network error. Please try again.', 'wp-queuepress'),
-							'sentOn'       => __('Sent to Buffer on', 'wp-queuepress'),
+							'sending'       => __('Sending…', 'wp-queuepress'),
+							'sent'          => __('Sent', 'wp-queuepress'),
+							'published'     => __('Published', 'wp-queuepress'),
+							'deleting'      => __('Deleting…', 'wp-queuepress'),
+							'deleted'       => __('Deleted', 'wp-queuepress'),
+							'deleteConfirm' => __('Delete all Buffer publications for this post?', 'wp-queuepress'),
+							'error'         => __('Error sending to Buffer.', 'wp-queuepress'),
+							'networkError'  => __('Network error. Please try again.', 'wp-queuepress'),
 						),
 					)
 				);

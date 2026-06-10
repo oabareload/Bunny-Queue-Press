@@ -1,6 +1,6 @@
 # Bunny Queue Press
 
-Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It provides a compact Pipeline overview, recurring weekly slot configuration in Calendar Settings, and an Add to Queue workflow that keeps Gutenberg autosave-safe while assigning future schedule dates.
+Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It provides a compact Pipeline overview, recurring weekly slot configuration in Calendar Settings, and an Add to Queue workflow that keeps Gutenberg autosave-safe while assigning future schedule dates. Since 2.0.0 it also integrates with Buffer for social media publishing to Instagram, X/Twitter, and Threads.
 
 ## Plugin metadata
 
@@ -30,6 +30,9 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 - Compact editorial pipeline cards with full-card click targets
 - Single-user focused workflow for small editorial teams or solo creators
 - Minimal native admin styling with no JavaScript framework dependency
+- Buffer integration for publishing to Instagram, X/Twitter, and Threads
+- Per-platform resend from the Pipeline without re-publishing to all channels
+- Delete Buffer publications directly from the Pipeline action menu
 
 ## Workflow
 
@@ -40,14 +43,218 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 5. Autosave is temporarily paused while queue mode is active to keep date changes safe.
 6. For Add First: click "Review & Confirm Queue Rebuild" in the pre-publish panel to preview all affected posts before saving.
 7. Review drafts, scheduled posts, and published content in the **Pipeline** page.
+8. Use the per-card action menu (⋮) to send to Buffer, resend to a specific platform, or delete all Buffer publications for a post.
 
 ## Admin Pages
 
 - **Pipeline** — editorial overview of Drafts, Scheduled, and Published posts
 - **Calendar Settings** — recurring weekly slot configuration with weekdays only
 - **Settings** — plugin preferences and queue assignment controls
+- **Buffer Settings** — per-channel configuration for Instagram, X/Twitter, and Threads
+
+---
+
+## Architecture
+
+### Platform_Registry — single source of truth
+
+Since 2.2.0, all platform definitions live exclusively in `Platform_Registry` (`includes/Buffer/Platform_Registry.php`). No other file declares platform labels, icons, publisher classes, field definitions, limits, defaults, or post styles. Every consumer reads from the Registry.
+
+**What the Registry owns:**
+
+| Concern | Method |
+|---|---|
+| Human-readable label | `Platform_Registry::label(string $slug): string` |
+| SVG icon markup | `Platform_Registry::icon_svg(string $slug): string` |
+| Publisher class name | `Platform_Registry::publisher_class(string $slug): ?string` |
+| Character and image limits | `Platform_Registry::limit_value()` / `limit_label()` |
+| Default field values | Returned via `Platform_Registry::get($slug)['extra_defaults']` |
+| Supported post styles | Returned via `Platform_Registry::get($slug)['supported_post_styles']` |
+| All registered platforms | `Platform_Registry::all(): array` |
+
+**Consumers and how they read from the Registry:**
+
+- `Channel_Config` — delegates `fields_for()`, `limits_for()`, `defaults_for()`, and `sanitize()` entirely to the Registry. Contains zero platform-specific switches.
+- `Buffer_Ajax` — resolves publisher classes via `Platform_Registry::publisher_class($service)`. Validates service slugs via `Platform_Registry::exists($service)`.
+- `Pipeline_Page` — renders the platform strip by iterating `Platform_Registry::all()`. The loop is fully dynamic; no platform name appears in the render logic.
+- `Buffer_Page` — generates per-platform field UI by iterating channel definitions produced from Registry-driven `Channel_Config::fields_for()`.
+
+### How to add a new platform
+
+Adding a platform requires changes to exactly one file: `Platform_Registry.php`.
+
+Inside `Platform_Registry::build()`, add an entry to the returned array:
+
+```php
+'myplatform' => array(
+    'label'               => 'My Platform',
+    'publisher_class'     => Twitter_Publisher::class, // reuse or create a publisher
+    'icon_svg'            => '<svg ...>...</svg>',
+    'limits'              => array(
+        array('label' => 'Character limit', 'value' => 280),
+        array('label' => 'Max images',      'value' => 4),
+    ),
+    'extra_defaults'      => array(
+        'post_style' => 'social_post',
+    ),
+    'supported_post_styles' => array('social_post', 'card_link'),
+    'default_post_style'    => 'social_post',
+),
+```
+
+After adding the entry:
+- The platform appears automatically in the Buffer Settings UI (fields rendered from `Channel_Config::fields_for()`).
+- The platform icon appears in the Pipeline strip as soon as a channel with that service slug is synced.
+- `Buffer_Ajax` will route publish requests to the declared publisher class without any code change.
+- No modifications are needed in `Channel_Config`, `Buffer_Ajax`, or `Pipeline_Page`.
+
+### What was eliminated in 2.2.0
+
+Prior to 2.2.0, platform identity was distributed across multiple files:
+
+- `Channel_Config` contained `switch ($service)` blocks inside `fields_for()`, `limits_for()`, `defaults_for()`, and `sanitize()`. Each new platform required edits to all four methods.
+- `Buffer_Ajax::publish_to_services()` contained a manual `switch` that mapped service slugs to publisher class names.
+- `Pipeline_Page` contained a static list of platform slugs for icon rendering.
+
+All of these were replaced by delegation to `Platform_Registry`. There are now zero `switch ($service)` statements and zero hardcoded platform lists outside the Registry.
+
+---
+
+## Pipeline
+
+### Per-platform resend
+
+Each platform icon in the Pipeline strip is clickable when a Buffer record exists for that channel. Clicking a platform icon sends the post to Buffer for that specific service only, without re-publishing to all connected channels.
+
+The AJAX action `qps_send_to_buffer_service` accepts `post_id` and `service`, resolves the correct publisher from `Platform_Registry`, executes the publish, and updates the strip state in-place.
+
+### Delete Buffer publications
+
+The action menu (⋮) on each pipeline card includes a **Delete Buffer Posts** option. Clicking it sends a confirmed delete request to the AJAX action `qps_delete_buffer_posts`, which calls `Buffer_Client::delete_post()` for each stored `post_id`, removes the persisted meta records, and resets the platform strip to the idle state.
+
+### Visual platform states
+
+Each icon in the strip reflects the real state of the persisted Buffer record:
+
+| State class | Meaning |
+|---|---|
+| `qps-platform--idle` | No Buffer record exists for this platform |
+| `qps-platform--pending` | Buffer returned a pending/processing status |
+| `qps-platform--scheduled` | Post is queued in Buffer but not yet published |
+| `qps-platform--success` | Post was successfully sent to Buffer |
+| `qps-platform--error` | Buffer returned an error or failure status |
+
+State is derived exclusively from the persisted `_queuepress_buffer_channels` meta key. No guessing based on request success alone.
+
+### Dynamic platform strip
+
+The strip rendered beneath each card thumbnail is generated entirely from `Platform_Registry::all()`. The PHP template contains no platform names — only a `foreach` over the registry. Adding a new platform to the Registry causes it to appear automatically in every pipeline card for posts that have a channel record with that service slug.
+
+---
+
+## Publishers
+
+### social_post
+
+Produces content-first social posts by assembling the caption from the post excerpt and body. When the combined text exceeds the platform character limit, the content is automatically split into a thread (Twitter and Threads) or truncated (Instagram). Images are distributed across thread elements up to the per-platform image limit.
+
+Caption construction order:
+- Thread element 0: excerpt + permalink
+- Thread element 1: post title + first body chunk
+- Thread elements 2…N: remaining body chunks
+
+### card_link
+
+Produces a traffic-oriented post using the post excerpt as the body text, the post URL as an attached link, and the post thumbnail as the preview image. Never generates a thread. Text is always trimmed to fit within the platform character limit. An SEO title is used when available.
+
+### Twitter
+
+Supports both `social_post` and `card_link`. In `social_post` mode, long content is split into a numbered thread using `split_caption_into_chunks()`. Images are distributed across thread elements. Premium accounts can use longer threads (`max_thread_posts` limit). The `premium_account` flag is configurable per channel.
+
+### Threads
+
+Supports both `social_post` and `card_link`. Follows the same thread model as Twitter in `social_post` mode. NSFW posts are automatically forced to `card_link` mode — this rule is enforced by `Threads_Publisher` and is not user-configurable. In `card_link` mode only the featured image is used.
+
+### Instagram
+
+Uses traditional single-post publication. Supports gallery images (featured image + ACF gallery) in SFW posts. NSFW posts use the featured image only — this rule is enforced by `Instagram_Publisher` and is not user-configurable. Does not support thread mode or `card_link`.
+
+---
+
+## Configuration
+
+### Dynamic field generation
+
+Buffer Settings fields for each platform are generated from `Channel_Config::fields_for($service)`, which reads field definitions from `Platform_Registry`. The UI contains no hardcoded field lists. Adding a field to a platform definition in the Registry causes it to appear in the settings form automatically.
+
+### premium_account
+
+Available for X/Twitter channels. When enabled, the Twitter publisher allows longer threads by reading the `max_thread_posts` limit from the Registry rather than applying the standard limit. Stored as a boolean in `_queuepress_buffer_channels` keyed by `channel_id`.
+
+### post_style
+
+Available for X/Twitter and Threads channels. Controls whether the publisher uses `social_post` (content-first, thread-capable) or `card_link` (excerpt + URL + thumbnail) for each channel. The default value per platform is defined in `Platform_Registry::get($slug)['default_post_style']`. Stored per channel in `_queuepress_buffer_channels`.
+
+The `post_style` UI field is rendered only for platforms that declare `supported_post_styles` with more than one option. Instagram does not expose this field.
+
+---
+
+## Migrations
+
+### Schema version 2
+
+Introduced in 2.2.0. The `_queuepress_buffer_channels` configuration schema was cleaned to remove fields that were previously user-configurable but have since been reclassified as internal system rules enforced by publishers:
+
+- `content_source` — removed. Content assembly strategy is now determined by `post_style` and platform-specific publisher logic.
+- `image_source` — removed. Image selection rules (featured-only for NSFW, gallery for SFW) are now enforced exclusively by each publisher.
+
+These fields should never appear in the settings UI. Their removal prevents user confusion and ensures the system behaves consistently regardless of what older configuration rows contain.
+
+### Automatic legacy cleanup
+
+`Channel_Config::migrate_legacy_config()` is called once on plugin load. It reads the stored schema version from the `wp_queuepress_channel_config_schema_version` option. If the stored version is less than `2`, it iterates all channel configurations stored in `_queuepress_buffer_channels`, strips `content_source` and `image_source` from each record, and updates the stored option to `2`.
+
+On subsequent requests the guard condition (`$current >= CURRENT_SCHEMA_VERSION`) returns immediately after a single cached `get_option()` call. There is no database write after the first migration.
+
+---
 
 ## Changelog
+
+### 2.2.0
+
+**Platform_Registry — unified platform architecture**
+
+- Introduced `Platform_Registry` as the single source of truth for all platform definitions. Labels, icons, publisher classes, field definitions, limits, defaults, and post styles are now declared once and consumed everywhere.
+- Removed all `switch ($service)` blocks from `Channel_Config`. The four methods `fields_for()`, `limits_for()`, `defaults_for()`, and `sanitize()` now delegate entirely to the Registry.
+- `Buffer_Ajax::publish_to_services()` now resolves publisher classes via `Platform_Registry::publisher_class()` instead of a manual switch.
+- `Pipeline_Page` platform strip is now fully dynamic, driven by `Platform_Registry::all()`. No platform names appear in the render loop.
+- Added `Buffer_Client::delete_post()` for deleting individual Buffer publications by their Buffer post ID.
+
+**Pipeline improvements**
+
+- Per-platform resend: clicking a platform icon in the strip sends the post to Buffer for that service only (`qps_send_to_buffer_service` AJAX action).
+- Delete Buffer Posts: action menu option removes all Buffer records for a post and resets the strip to idle.
+- Unified platform state resolver — states `pending`, `queued`, `processing`, `scheduled`, `added_to_queue`, `sent`, `published`, `success`, `error`, and `failed` are all mapped to visual modifiers consistently.
+- Platform strip generated dynamically from `Platform_Registry::all()`.
+
+**Publishers**
+
+- `Twitter_Publisher` and `Threads_Publisher` support both `social_post` and `card_link` post styles.
+- `Instagram_Publisher` maintains traditional single-post publication.
+- NSFW rules enforced by publishers, not by configuration.
+
+**Configuration**
+
+- `post_style` field rendered only for platforms that declare multiple supported styles.
+- `premium_account` field available for Twitter channels.
+- All field definitions sourced from `Platform_Registry` via `Channel_Config`.
+
+**Migrations**
+
+- Schema version bumped to 2.
+- `Channel_Config::migrate_legacy_config()` strips `content_source` and `image_source` from all stored channel records on first load after upgrade.
+- Migration runs at most once; subsequent requests exit the guard in O(1) via a cached `wp_options` read.
+
 ### 2.1.1
 
 **Twitter & Threads reliability fixes**
@@ -76,7 +283,7 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
   - Added per-platform state modifiers (`qps-platform--idle | --success | --scheduled | --pending | --error`) with dedicated tooltips (platform name, state, sent-at timestamp).
   - Introduced a placeholder state for posts without a featured image so the card keeps a consistent 140×140 footprint and the action menu remains usable.
   - Tightened thumbnail and strip dimensions (miniature 140×140, icon 14×14, gap 1px, strip capped at ~55% of the image width) to make the strip a discreet indicator rather than a dominant element.
-  - Derived platform state exclusively from the real persisted Buffer record (`post_id` + `sent_at`), preventing “Not Sent” tooltip mismatches when legacy or empty meta rows exist.
+  - Derived platform state exclusively from the real persisted Buffer record (`post_id` + `sent_at`), preventing "Not Sent" tooltip mismatches when legacy or empty meta rows exist.
   - Cleaned up legacy selectors (`.qps-buffer-indicator`, `.qps-action-menu*`) and the `get_buffer_channel_entry()` helper, which were superseded by the new `resolve_platform_state()` resolver.
 
 - **Content publishing improvements:**
@@ -153,6 +360,8 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 - Redesigned compact editorial pipeline cards
 - Fixed admin UI asset routing and page styling
 
+---
+
 ## Installation
 
 1. Copy the `wp-queuepress` folder into `wp-content/plugins/`.
@@ -160,6 +369,7 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 3. Open **Bunny Queue Press > Pipeline** to review editorial status.
 4. Open **Bunny Queue Press > Calendar Settings** to configure weekly recurring slots.
 5. Use the Gutenberg editor QueuePress panel to schedule drafts safely.
+6. Open **Bunny Queue Press > Buffer Settings** to connect your Buffer account and configure per-channel publishing options.
 
 ## File structure
 
@@ -167,54 +377,58 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 Bunny-Queue-Press/
 ├── LICENSE
 ├── README.md
-├── wp-queuepress/
-│   ├── assets/
-│   │   ├── css/
-│   │   │   ├── admin.css
-│   │   │   ├── bunny-admin.css
-│   │   │   └── editor.css
-│   │   └── js/
-│   │       ├── calendar.js
-│   │       └── editor.js
-│   ├── includes/
-│   │   ├── Admin/
-│   │   │   ├── Admin_Header.php
-│   │   │   ├── Admin_Menu.php
-│   │   │   ├── Calendar_Page.php
-│   │   │   ├── Pipeline_Page.php
-│   │   │   ├── Settings_Page.php
-│   │   │   └── Slot_Ajax.php
-│   │   ├── Editor/
-│   │   │   └── Editor_Assets.php
-│   │   ├── Plugin.php
-│   │   ├── Rest/
-│   │   │   └── Queue_Controller.php
-│   │   ├── Schedule/
-│   │   │   ├── Post_Query.php
-│   │   │   ├── Queue_Assigner.php
-│   │   │   ├── Queue_Commit_Handler.php
-│   │   │   ├── Queue_Rebuilder.php
-│   │   │   ├── Schedule_Calculator.php
-│   │   │   └── Slot_Repository.php
-│   │   └── Settings/
-│   │       └── Preferences.php
-│   │   └── Buffer/
-│   │       ├── Buffer_Ajax.php
-│   │       ├── Buffer_Client.php
-│   │       ├── Buffer_Debug.php
-│   │       ├── Channel_Config.php
-│   │       ├── Instagram_Publisher.php
-│   │       ├── Mutation_Commons.php
-│   │       ├── Publisher_Commons.php
-│   │       ├── Threads_Publisher.php
-│   │       └── Twitter_Publisher.php
-│   ├── languages/
-│   │   ├── wp-queuepress-es_ES-wp-queuepress-editor.json
-│   │   ├── wp-queuepress-es_ES.mo
-│   │   ├── wp-queuepress-es_ES.po
-│   │   └── wp-queuepress.pot
-│   ├── uninstall.php
-│   └── wp-queuepress.php
+└── wp-queuepress/
+    ├── assets/
+    │   ├── css/
+    │   │   ├── admin.css
+    │   │   ├── bunny-admin.css
+    │   │   └── editor.css
+    │   └── js/
+    │       ├── buffer-admin.js
+    │       ├── calendar.js
+    │       ├── editor.js
+    │       └── pipeline-buffer.js
+    ├── includes/
+    │   ├── Admin/
+    │   │   ├── Admin_Header.php
+    │   │   ├── Admin_Menu.php
+    │   │   ├── Buffer_Page.php
+    │   │   ├── Calendar_Page.php
+    │   │   ├── Pipeline_Page.php
+    │   │   ├── Settings_Page.php
+    │   │   └── Slot_Ajax.php
+    │   ├── Buffer/
+    │   │   ├── Buffer_Ajax.php
+    │   │   ├── Buffer_Client.php
+    │   │   ├── Buffer_Debug.php
+    │   │   ├── Channel_Config.php
+    │   │   ├── Instagram_Publisher.php
+    │   │   ├── Mutation_Commons.php
+    │   │   ├── Platform_Registry.php
+    │   │   ├── Publisher_Commons.php
+    │   │   ├── Threads_Publisher.php
+    │   │   └── Twitter_Publisher.php
+    │   ├── Editor/
+    │   │   └── Editor_Assets.php
+    │   ├── Rest/
+    │   │   └── Queue_Controller.php
+    │   ├── Schedule/
+    │   │   ├── Post_Query.php
+    │   │   ├── Queue_Assigner.php
+    │   │   ├── Queue_Commit_Handler.php
+    │   │   ├── Queue_Rebuilder.php
+    │   │   ├── Schedule_Calculator.php
+    │   │   └── Slot_Repository.php
+    │   ├── Settings/
+    │   │   └── Preferences.php
+    │   └── Plugin.php
+    ├── languages/
+    │   ├── wp-queuepress-es_ES-wp-queuepress-editor.json
+    │   ├── wp-queuepress-es_ES.mo
+    │   ├── wp-queuepress-es_ES.po
+    │   └── wp-queuepress.pot
+    ├── uninstall.php
+    └── wp-queuepress.php
 ```
 
 ## Localization
@@ -228,3 +442,6 @@ Bunny-Queue-Press/
 - No background workers, cron jobs, or batch processors are used. All queue operations are synchronous and triggered by the user's explicit save action in Gutenberg.
 - The Add First rebuild is compute-only at preview time; changes are only written to the database after the user confirms in the modal.
 - Internal prefixes, namespaces, text domains, and database keys remain unchanged from prior releases.
+- Buffer integration uses Bearer Token authentication only. OAuth flows are not supported.
+- The GraphQL mutation format used for Buffer publishing (`addToQueue`, `automatic`, `type: post`, `shouldShareToFeed: true`) must not be altered — it is validated against existing n8n workflow expectations.
+- NSFW content rules (featured-only for Instagram NSFW, forced card_link for Threads NSFW) are enforced by publishers and are not exposed as user-configurable options.

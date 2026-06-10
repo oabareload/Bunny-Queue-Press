@@ -84,6 +84,9 @@ final class Plugin {
 		$queue_api     = new Queue_Controller($queue_assigner, $queue_rebuilder);
 		$queue_commit  = new Queue_Commit_Handler($queue_assigner, $queue_rebuilder, $preferences);
 
+		// Run once-per-upgrade schema migrations.
+		( new \QueuePostScheduler\Buffer\Channel_Config() )->migrate_legacy_config();
+
 		$settings_page->register();
 		$calendar_page->register();
 		$buffer_page->register();

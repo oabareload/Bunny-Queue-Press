@@ -240,7 +240,7 @@ final class Twitter_Publisher {
         $max_images_entry = $service_limits['max_images'] ?? array('value' => 4);
         $max_thread_posts_entry = $service_limits['max_thread_posts'] ?? array('value' => 25);
         $max_images_value = is_array($max_images_entry) && isset($max_images_entry['value']) ? (int) $max_images_entry['value'] : (int) $max_images_entry;
-        $max_thread_posts_value = is_array($max_thread_posts_entry) && isset($max_thread_posts_entry['value']) ? (int) $max_thread_posts_entry : (int) $max_thread_posts_entry;
+        $max_thread_posts_value = is_array($max_thread_posts_entry) && isset($max_thread_posts_entry['value']) ? (int) $max_thread_posts_entry['value'] : (int) $max_thread_posts_entry;
         $max_total_images = max(1, $max_images_value * $max_thread_posts_value);
         $images = Publisher_Commons::build_assets($post, $cfg, $is_nsfw, $max_total_images, true);
 

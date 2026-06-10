@@ -303,6 +303,55 @@ final class Buffer_Client {
 	}
 
 	/**
+	 * Deletes a previously created Buffer post by its remote id.
+	 *
+	 * Calls the official deletePost mutation. Returns a normalized result:
+	 *   - On success: ['success' => true, 'post_id' => $id]
+	 *   - On failure: ['success' => false, 'message' => <buffer message>]
+	 *
+	 * @param string $post_id Buffer post id returned by createPost.
+	 * @return array<string, mixed>
+	 */
+	public function delete_post(string $post_id): array {
+		if ($post_id === '') {
+			return array(
+				'success' => false,
+				'message' => __('Missing Buffer post id.', 'wp-queuepress'),
+			);
+		}
+		$mutation = sprintf(
+			'mutation { deletePost(input: { id: "%s" }) { id } }',
+			esc_js($post_id)
+		);
+		$response = $this->mutate($mutation);
+
+		$delete_post = $response['data']['deletePost'] ?? null;
+		if (is_array($delete_post) && isset($delete_post['id']) && (string) $delete_post['id'] !== '') {
+			return array(
+				'success' => true,
+				'post_id' => (string) $delete_post['id'],
+			);
+		}
+		if (is_array($delete_post) && isset($delete_post['message'])) {
+			return array(
+				'success' => false,
+				'message' => (string) $delete_post['message'],
+			);
+		}
+		// MutationError inside data: try the legacy path.
+		if (isset($response['data']['message'])) {
+			return array(
+				'success' => false,
+				'message' => (string) $response['data']['message'],
+			);
+		}
+		return array(
+			'success' => false,
+			'message' => __('Unexpected response from Buffer. Please try again.', 'wp-queuepress'),
+		);
+	}
+
+	/**
 	 * Returns the last captured request/response details.
 	 *
 	 * @return array<string,mixed>

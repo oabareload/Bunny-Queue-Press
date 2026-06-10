@@ -106,15 +106,9 @@ final class Channel_Config {
 	public const CURRENT_SCHEMA_VERSION = 2;
 
 	/**
-	 * Valid values for the post_style field (Twitter and Threads only).
-	 *
-	 * 'social_post' → standard content-based publication; the system may auto-thread.
-	 * 'card_link'   → traffic-oriented; never threads; always trims to platform limit.
+	 * Text domain used by this class for translations.
 	 */
-	private const POST_STYLE_OPTIONS = array(
-		'social_post',
-		'card_link',
-	);
+	private const TEXT_DOMAIN = 'wp-queuepress';
 
 	// -------------------------------------------------------------------------
 	// Public API
@@ -192,48 +186,22 @@ final class Channel_Config {
 	 * @return array<string, array<string, mixed>>
 	 */
 	public function fields_for(string $service): array {
-		$post_style_field = array(
-			'post_style' => array(
-				'type'        => 'select',
-				'label'       => __('Post style', 'wp-queuepress'),
-				'description' => __('Controls how the content is formatted when published.', 'wp-queuepress'),
-				'options'     => array(
-					'social_post' => __('Social post', 'wp-queuepress'),
-					'card_link'   => __('Card link', 'wp-queuepress'),
-				),
-				'option_descriptions' => array(
-					'social_post' => __('Standard content-based publication. The system uses the post excerpt as an introduction and the full post content as the body, splitting it into a thread when needed.', 'wp-queuepress'),
-					'card_link'   => __('Traffic-oriented publication. Uses the post excerpt as the body, the post URL as the link, the SEO title when available, and the post thumbnail. Never generates a thread.', 'wp-queuepress'),
-				),
-			),
-		);
-
-		$premium_account_field = array(
-			'premium_account' => array(
-				'type'        => 'checkbox',
-				'label'       => __('Premium account', 'wp-queuepress'),
-				'description' => __('Enable if you have a Premium X/Twitter subscription. Increases the character limit to 25,000.', 'wp-queuepress'),
-			),
-		);
-
-		switch ($service) {
-			case 'instagram':
-				// Instagram has no user-configurable fields beyond enabled.
-				// Content and image sources are determined by system rules.
-				return array();
-
-			case 'twitter':
-				return array_merge(
-					$premium_account_field,
-					$post_style_field
-				);
-
-			case 'threads':
-				return $post_style_field;
-
-			default:
-				return array();
+		$def = Platform_Registry::get($service);
+		if (! $def) { return array(); }
+		$fields = array();
+		foreach ((array) ($def['extra_field_keys'] ?? array()) as $key) {
+			if ('premium_account' === $key) {
+				$fields['premium_account'] = $this->build_premium_field();
+				continue;
+			}
+			if ('post_style' === $key) {
+				$styles = (array) ($def['supported_post_styles'] ?? array());
+				if (! empty($styles)) {
+					$fields['post_style'] = $this->build_post_style_field($styles);
+				}
+			}
 		}
+		return $fields;
 	}
 
 	/**
@@ -255,54 +223,19 @@ final class Channel_Config {
 	 * @return array<string, array{label: string, value: int}>
 	 */
 	public function limits_for(string $service): array {
-		switch ($service) {
-			case 'instagram':
-				return array(
-					'max_images'      => array(
-						'label' => __('Maximum images', 'wp-queuepress'),
-						'value' => 10,
-					),
-					'character_limit' => array(
-						'label' => __('Maximum characters', 'wp-queuepress'),
-						'value' => 2196,
-					),
-				);
-
-			case 'twitter':
-				return array(
-					'max_images'              => array(
-						'label' => __('Maximum images', 'wp-queuepress'),
-						'value' => 4,
-					),
-					'max_thread_posts'        => array(
-						'label' => __('Maximum thread posts', 'wp-queuepress'),
-						'value' => 25,
-					),
-					'character_limit'         => array(
-						'label' => __('Standard characters', 'wp-queuepress'),
-						'value' => 280,
-					),
-					'character_limit_premium' => array(
-						'label' => __('Premium characters', 'wp-queuepress'),
-						'value' => 25000,
-					),
-				);
-
-			case 'threads':
-				return array(
-					'max_images'      => array(
-						'label' => __('Maximum images', 'wp-queuepress'),
-						'value' => 20,
-					),
-					'character_limit' => array(
-						'label' => __('Maximum characters', 'wp-queuepress'),
-						'value' => 500,
-					),
-				);
-
-			default:
-				return array();
+		$def = Platform_Registry::get($service);
+		if (! $def || empty($def['limits']) || ! is_array($def['limits'])) {
+			return array();
 		}
+		$out = array();
+		foreach ($def['limits'] as $key => $entry) {
+			if (! is_array($entry)) { continue; }
+			$out[$key] = array(
+				'label' => (string) ($entry['label'] ?? ''),
+				'value' => (int) ($entry['value'] ?? 0),
+			);
+		}
+		return $out;
 	}
 
 	/**
@@ -321,26 +254,14 @@ final class Channel_Config {
 			'service'  => $service,
 			'enabled'  => false,
 		);
-
-		switch ($service) {
-			case 'instagram':
-				// No user-configurable fields for Instagram.
-				return $base;
-
-			case 'twitter':
-				return array_merge($base, array(
-					'premium_account' => false,
-					'post_style'      => 'social_post',
-				));
-
-			case 'threads':
-				return array_merge($base, array(
-					'post_style' => 'social_post',
-				));
-
-			default:
-				return $base;
-		}
+		$def = Platform_Registry::get($service);
+		if (! $def) { return $base; }
+		$extras = (array) ($def['extra_defaults'] ?? array());
+		// Drop empty/null so we never persist an empty post_style on Instagram.
+		$extras = array_filter($extras, static function ($v): bool {
+			return $v !== '' && $v !== null;
+		});
+		return array_merge($base, $extras);
 	}
 
 	/**
@@ -400,26 +321,71 @@ final class Channel_Config {
 	 * @return array<string, mixed>
 	 */
 	private function sanitize(string $service, array $raw): array {
-		$defaults = $this->defaults_for($service);
-		$out      = array(
+		$out = array(
 			'provider' => 'buffer',
 			'service'  => sanitize_key($service),
 			'enabled'  => ! empty($raw['enabled']),
 		);
+		$def = Platform_Registry::get($service);
+		if (! $def) { return $out; }
 
-		// premium_account — Twitter only.
-		if (isset($defaults['premium_account'])) {
-			$out['premium_account'] = ! empty($raw['premium_account']);
+		foreach ((array) ($def['extra_field_keys'] ?? array()) as $key) {
+			if ('premium_account' === $key) {
+				$out['premium_account'] = ! empty($raw['premium_account']);
+				continue;
+			}
+			if ('post_style' === $key) {
+				$allowed = (array) ($def['supported_post_styles'] ?? array());
+				if (empty($allowed)) { continue; }
+				$val = isset($raw['post_style']) ? sanitize_key((string) $raw['post_style']) : '';
+				$out['post_style'] = in_array($val, $allowed, true)
+					? $val
+					: (string) ($def['default_post_style'] ?? $allowed[0]);
+			}
 		}
-
-		// post_style — Twitter and Threads only (not Instagram).
-		if (isset($defaults['post_style'])) {
-			$val             = isset($raw['post_style']) ? sanitize_key($raw['post_style']) : '';
-			$out['post_style'] = in_array($val, self::POST_STYLE_OPTIONS, true)
-				? $val
-				: $defaults['post_style'];
-		}
-
 		return $out;
+	}
+
+	/**
+	 * Returns the field definition for the premium_account checkbox.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function build_premium_field(): array {
+		return array(
+			'type'        => 'checkbox',
+			'label'       => __('Premium account', self::TEXT_DOMAIN),
+			'description' => __('Enable if you have a Premium X/Twitter subscription. Increases the character limit to 25,000.', self::TEXT_DOMAIN),
+		);
+	}
+
+	/**
+	 * Returns the field definition for the post_style select.
+	 *
+	 * The set of available styles is taken from the platform definition in
+	 * the registry. Each supported style becomes a select option with a
+	 * translated label and, when applicable, a translated description.
+	 *
+	 * @param string[] $styles Allowed post_style values for the platform.
+	 * @return array<string, mixed>
+	 */
+	private function build_post_style_field(array $styles): array {
+		$options      = array();
+		$descriptions = array();
+		if (in_array('social_post', $styles, true)) {
+			$options['social_post']      = __('Social post', self::TEXT_DOMAIN);
+			$descriptions['social_post'] = __('Standard content-based publication. The system uses the post excerpt as an introduction and the full post content as the body, splitting it into a thread when needed.', self::TEXT_DOMAIN);
+		}
+		if (in_array('card_link', $styles, true)) {
+			$options['card_link']      = __('Card link', self::TEXT_DOMAIN);
+			$descriptions['card_link'] = __('Traffic-oriented publication. Uses the post excerpt as the body, the post URL as the link, the SEO title when available, and the post thumbnail. Never generates a thread.', self::TEXT_DOMAIN);
+		}
+		return array(
+			'type'                => 'select',
+			'label'               => __('Post style', self::TEXT_DOMAIN),
+			'description'         => __('Controls how the content is formatted when published.', self::TEXT_DOMAIN),
+			'options'             => $options,
+			'option_descriptions' => $descriptions,
+		);
 	}
 }

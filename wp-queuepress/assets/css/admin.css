@@ -1094,18 +1094,19 @@
 	gap: 6px;
 }
 
-/* Title link: grows, truncates long titles */
+/* Title link: grows, truncates long titles (2.2: up to 3 lines) */
 .qps-card-title-link {
 	color: #1d2327;
+	display: -webkit-box;
 	flex: 1;
 	font-size: 13px;
 	font-weight: 600;
-	line-height: 1.4;
+	line-height: 1.35;
 	min-width: 0;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
 	overflow: hidden;
 	text-decoration: none;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 a.qps-card-title-link:hover {
@@ -1323,6 +1324,44 @@ a.qps-card-title-link:hover {
 	font-size: 14px;
 }
 
+/* 2.2: menu items may also be <a> elements (View Post). */
+.qps-image-menu-list a.qps-image-menu-item {
+	align-items: center;
+	color: #1d2327;
+	display: flex;
+	gap: 8px;
+	padding: 8px 12px;
+	text-align: left;
+	text-decoration: none;
+	width: 100%;
+}
+
+.qps-image-menu-list a.qps-image-menu-item:hover {
+	background: #f6f7f7;
+	color: #1d2327;
+}
+
+.qps-image-menu-list a.qps-image-menu-item .qps-icon {
+	color: #2271b1;
+	font-size: 14px;
+}
+
+/* 2.2: Delete Buffer Posts — subtle danger hint in the icon color. */
+.qps-image-menu-list .qps-delete-buffer-posts .qps-icon {
+	color: #d63638;
+}
+
+.qps-image-menu-list .qps-delete-buffer-posts:hover .qps-icon {
+	color: #d63638;
+}
+
+/* 2.2: Send to Buffer disabled state for non-publishable posts. */
+.qps-send-to-buffer.is-disabled,
+.qps-send-to-buffer:disabled {
+	cursor: not-allowed;
+	opacity: 0.55;
+}
+
 /* Platform status strip (bottom-left of the image) */
 .qps-platform-strip {
 	align-items: center;
@@ -1355,6 +1394,33 @@ a.qps-card-title-link:hover {
 
 .qps-platform--idle {
 	color: rgba(255, 255, 255, 0.45);
+}
+
+/* 2.2: clickable platform icons (those backed by a real Buffer record). */
+button.qps-platform,
+.qps-platform--clickable {
+	background: transparent;
+	border: 0;
+	cursor: pointer;
+	padding: 0;
+}
+
+button.qps-platform:hover,
+button.qps-platform:focus-visible,
+.qps-platform--clickable:hover,
+.qps-platform--clickable:focus-visible {
+	outline: none;
+	transform: scale(1.15);
+}
+
+button.qps-platform:focus-visible,
+.qps-platform--clickable:focus-visible {
+	box-shadow: 0 0 0 1px #fff;
+}
+
+.qps-platform--busy {
+	opacity: 0.4;
+	pointer-events: none;
 }
 
 .qps-platform--success,
