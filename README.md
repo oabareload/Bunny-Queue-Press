@@ -47,10 +47,11 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 
 ## Admin Pages
 
-- **Pipeline** — editorial overview of Drafts, Scheduled, and Published posts
-- **Calendar Settings** — recurring weekly slot configuration with weekdays only
-- **Settings** — plugin preferences and queue assignment controls
-- **Buffer Settings** — per-channel configuration for Instagram, X/Twitter, and Threads
+- Pipeline — editorial overview of Drafts, Scheduled, and Published posts
+- Calendar Settings — recurring weekly slot configuration with weekdays only
+- Settings — plugin preferences and queue assignment controls
+- Buffer Settings — Buffer connection and channel configuration
+- Lab — GraphQL playground, debug console, Buffer diagnostics, and developer tools
 
 ---
 
@@ -225,6 +226,36 @@ On subsequent requests the guard condition (`$current >= CURRENT_SCHEMA_VERSION`
 ---
 
 ## Changelog
+
+### 2.3.0
+
+**New**
+
+- Added a dedicated **Lab** page for advanced Buffer diagnostics and testing.
+- Added a GraphQL Playground capable of executing raw GraphQL queries and mutations directly against the configured Buffer account.
+- Added a Debug Console with refresh, download, and clear log actions.
+- Added a dedicated Lab Mode gate (`qps_lab_enabled`) requiring explicit user confirmation before enabling advanced tooling.
+- Added `Buffer_Client::execute_raw_graphql()` for direct GraphQL execution using the configured Buffer credentials.
+
+**Improved**
+
+- Moved all Buffer debugging and diagnostic tooling out of Buffer Settings into the dedicated Lab page.
+- Debug Logging is now managed entirely from Lab.
+- Added Lab Mode status indicators and developer-oriented diagnostics.
+- Added a dedicated admin navigation tab for Lab.
+
+**Removed**
+
+- Removed the Debug Logging checkbox from Buffer Settings.
+- Removed View Debug Log and Clear Debug Log actions from Buffer Settings.
+- Removed the inline debug log viewer from Buffer Settings.
+- Removed the legacy `admin_post_qps_buffer_clear_debug_log` workflow.
+
+**Architecture**
+
+- Buffer Settings is now focused exclusively on Buffer connection and channel configuration.
+- Lab centralizes all developer tooling, diagnostics, GraphQL testing, and debug log management.
+- Debug logging continues using the existing `debug_buffer` setting inside `wp_queuepress_buffer_settings`; no migration is required.
 
 ### 2.2.1
 
@@ -416,6 +447,7 @@ Bunny-Queue-Press/
     │       ├── buffer-admin.js
     │       ├── calendar.js
     │       ├── editor.js
+    │       ├── lab.js
     │       └── pipeline-buffer.js
     ├── includes/
     │   ├── Admin/
@@ -423,6 +455,7 @@ Bunny-Queue-Press/
     │   │   ├── Admin_Menu.php
     │   │   ├── Buffer_Page.php
     │   │   ├── Calendar_Page.php
+    │   │   ├── Lab_Page.php
     │   │   ├── Pipeline_Page.php
     │   │   ├── Settings_Page.php
     │   │   └── Slot_Ajax.php

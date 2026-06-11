@@ -31,6 +31,7 @@ final class Admin_Header {
 		'qps-calendar' => 'Calendar Settings',
 		'qps-settings' => 'Settings',
 		'qps-buffer'   => 'Buffer',
+		'qps-lab'      => 'Lab',
 	);
 
 	/**

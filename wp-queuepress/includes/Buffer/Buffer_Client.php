@@ -347,6 +347,103 @@ final class Buffer_Client {
 	}
 
 	/**
+	 * Executes an arbitrary GraphQL string (query or mutation) against the Buffer API.
+	 *
+	 * Reuses the same credentials, headers, timeout, and debug-logging
+	 * infrastructure as mutate(). Intended for the Lab playground — callers
+	 * should not duplicate transport logic.
+	 *
+	 * Returns a structured result:
+	 *   'http_status' => int|null   — HTTP response code, null on transport error.
+	 *   'body'        => array|null — Decoded JSON body, null when unavailable.
+	 *   'elapsed_ms'  => int        — Wall-clock time in milliseconds.
+	 *   'timestamp'   => string     — UTC datetime of the request.
+	 *   'error'       => string|null — WP_Error message, null on success.
+	 *
+	 * @param string $graphql GraphQL query or mutation string.
+	 * @param bool   $log     When true, honours the Buffer_Debug gate. When false, skips logging.
+	 * @return array<string,mixed>
+	 */
+	public function execute_raw_graphql(string $graphql, bool $log = true): array {
+		$timestamp = gmdate('Y-m-d H:i:s');
+		$start     = microtime(true);
+
+		if (empty($this->access_token)) {
+			return array(
+				'http_status' => null,
+				'body'        => null,
+				'elapsed_ms'  => 0,
+				'timestamp'   => $timestamp,
+				'error'       => __('No Buffer access token configured.', 'wp-queuepress'),
+			);
+		}
+
+		$headers = array(
+			'Authorization' => 'Bearer ' . $this->access_token,
+			'Content-Type'  => 'application/json',
+		);
+
+		$body = wp_json_encode(array('query' => $graphql));
+
+		$response = wp_remote_post(
+			self::API_URL,
+			array(
+				'headers' => $headers,
+				'body'    => $body,
+				'timeout' => 15,
+			)
+		);
+
+		$elapsed_ms = (int) round((microtime(true) - $start) * 1000);
+
+		$wp_error         = is_wp_error($response) ? $response : null;
+		$status           = null;
+		$raw              = '';
+		$response_headers = array();
+
+		if (! ($wp_error instanceof \WP_Error)) {
+			$status           = wp_remote_retrieve_response_code($response);
+			$raw              = wp_remote_retrieve_body($response);
+			$rh               = wp_remote_retrieve_headers($response);
+			$response_headers = is_array($rh) ? $rh : (array) $rh;
+		}
+
+		$log_entry = array(
+			'type'             => 'lab_raw_graphql',
+			'timestamp'        => $timestamp,
+			'endpoint'         => self::API_URL,
+			'graphql'          => $graphql,
+			'request_body'     => $body,
+			'request_headers'  => $headers,
+			'http_status'      => $status,
+			'response_headers' => $response_headers,
+			'response_body'    => $raw,
+			'elapsed_ms'       => $elapsed_ms,
+			'wp_error'         => $wp_error instanceof \WP_Error ? self::wp_error_to_array($wp_error) : null,
+		);
+
+		if ($log && class_exists(__NAMESPACE__ . '\\Buffer_Debug')) {
+			\QueuePostScheduler\Buffer\Buffer_Debug::add_entry($log_entry);
+		}
+
+		$decoded = null;
+		if (! empty($raw)) {
+			$decoded = json_decode($raw, true);
+			if (! is_array($decoded)) {
+				$decoded = null;
+			}
+		}
+
+		return array(
+			'http_status' => $status !== null ? (int) $status : null,
+			'body'        => $decoded,
+			'elapsed_ms'  => $elapsed_ms,
+			'timestamp'   => $timestamp,
+			'error'       => $wp_error instanceof \WP_Error ? $wp_error->get_error_message() : null,
+		);
+	}
+
+	/**
 	 * Returns the last captured request/response details.
 	 *
 	 * @return array<string,mixed>

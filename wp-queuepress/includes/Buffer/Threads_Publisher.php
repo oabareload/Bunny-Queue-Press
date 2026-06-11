@@ -165,12 +165,13 @@ final class Threads_Publisher {
         );
 
         if ($link_asset !== null) {
-            $assets = array($link_asset);
+            $assets   = array();
+            $assets[] = $link_asset;
             return Mutation_Commons::build_create_post_mutation(
                 $channel_id,
                 $caption,
                 $assets,
-                array('detected_post_style' => 'card_link'),
+                array('detected_post_style' => 'card_link', 'no_link_attachment' => true),
                 'threads'
             );
         }

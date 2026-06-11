@@ -65,7 +65,6 @@ final class Buffer_Page {
 		add_action('admin_post_qps_buffer_disconnect',          array($this, 'handle_disconnect'));
 		add_action('admin_post_qps_buffer_save_channel_config', array($this, 'handle_save_channel_config'));
 		add_action('wp_ajax_qps_buffer_autosave_channel',       array($this, 'handle_ajax_autosave_channel'));
-		add_action('admin_post_qps_buffer_clear_debug_log',      array($this, 'handle_clear_debug_log'));
 	}
 
 	// -------------------------------------------------------------------------
@@ -87,11 +86,9 @@ final class Buffer_Page {
 		$settings                    = $this->get_settings();
 		$token                       = isset($_POST['access_token']) ? sanitize_text_field(wp_unslash($_POST['access_token'])) : '';
 		$organization_id             = isset($_POST['organization_id']) ? sanitize_text_field(wp_unslash($_POST['organization_id'])) : '';
-		$debug_flag                  = isset($_POST['debug_buffer']) ? (bool) wp_unslash($_POST['debug_buffer']) : false;
 
 		$settings['access_token']    = $token;
 		$settings['organization_id'] = $organization_id;
-		$settings['debug_buffer']    = $debug_flag;
 
 		update_option(self::OPTION_SETTINGS, $settings);
 
@@ -281,24 +278,6 @@ final class Buffer_Page {
 		}
 	}
 
-	/**
-	 * Clears the Buffer debug log (admin action).
-	 *
-	 * @return void
-	 */
-	public function handle_clear_debug_log(): void {
-		if (! current_user_can('manage_options')) {
-			wp_die(esc_html__('You do not have permission to access this page.', 'wp-queuepress'));
-		}
-
-		check_admin_referer('qps_buffer_clear_debug_log');
-
-		\QueuePostScheduler\Buffer\Buffer_Debug::clear();
-
-		wp_safe_redirect(add_query_arg(array('page' => self::PAGE_SLUG, 'view_debug' => '1'), admin_url('admin.php')));
-		exit;
-	}
-
 	// -------------------------------------------------------------------------
 	// Render
 	// -------------------------------------------------------------------------
@@ -400,18 +379,14 @@ final class Buffer_Page {
 								<?php esc_html_e('Access Token', 'wp-queuepress'); ?>
 							</label>
 							<input
-								type="password"
-								id="qps-access-token"
-								name="access_token"
-								value="<?php echo esc_attr($settings['access_token']); ?>"
-								class="qps-token-input"
-								autocomplete="new-password"
-								placeholder="buf_…"
+							type="password"
+							id="qps-access-token"
+							name="access_token"
+							value="<?php echo esc_attr($settings['access_token']); ?>"
+							class="qps-token-input"
+							autocomplete="new-password"
+							placeholder="buf_…"
 							/>
-							<label style="margin-left:12px; display:inline-flex; align-items:center; gap:8px;">
-								<input type="checkbox" name="debug_buffer" value="1" <?php checked(! empty($settings['debug_buffer'])); ?> />
-								<span><?php esc_html_e('Buffer Debug Mode', 'wp-queuepress'); ?></span>
-							</label>
 							<?php submit_button(__('Save Token', 'wp-queuepress'), 'secondary small', 'submit', false); ?>
 						</div>
 					</form>
@@ -465,40 +440,15 @@ final class Buffer_Page {
 
 					<?php if ($connected) : ?>
 					<form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:inline;"
-						onsubmit="return confirm('<?php echo esc_js(__('Disconnect Buffer and remove all synchronized profiles?', 'wp-queuepress')); ?>');">
-						<input type="hidden" name="action" value="qps_buffer_disconnect" />
-						<?php wp_nonce_field('qps_buffer_disconnect'); ?>
-						<?php submit_button(__('Disconnect', 'wp-queuepress'), 'delete small', 'submit', false); ?>
-					</form>
-					<a class="button secondary small" href="<?php echo esc_url(add_query_arg('view_debug', '1', admin_url('admin.php?page=' . self::PAGE_SLUG))); ?>" style="margin-left:8px;">
-						<?php esc_html_e('View Debug Log', 'wp-queuepress'); ?>
-					</a>
-					<form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:inline; margin-left:8px;">
-						<input type="hidden" name="action" value="qps_buffer_clear_debug_log" />
-						<?php wp_nonce_field('qps_buffer_clear_debug_log'); ?>
-						<?php submit_button(__('Clear Debug Log', 'wp-queuepress'), 'secondary small', 'submit', false); ?>
+					onsubmit="return confirm('<?php echo esc_js(__('Disconnect Buffer and remove all synchronized profiles?', 'wp-queuepress')); ?>');"> 
+					<input type="hidden" name="action" value="qps_buffer_disconnect" />
+					<?php wp_nonce_field('qps_buffer_disconnect'); ?>
+					<?php submit_button(__('Disconnect', 'wp-queuepress'), 'delete small', 'submit', false); ?>
 					</form>
 					<?php endif; ?>
 				</div>
 				<?php endif; ?>
 			</div><!-- .qps-connection-card-body -->
-			<?php if (! empty($_GET['view_debug']) && current_user_can('manage_options')) :
-				$entries = \QueuePostScheduler\Buffer\Buffer_Debug::get_entries();
-			?>
-			<div class="qps-debug-log" style="padding:12px; border-top:1px solid #eee; background:#fff;">
-				<h3><?php esc_html_e('Buffer Debug Log', 'wp-queuepress'); ?></h3>
-				<?php if (empty($entries)) : ?>
-					<p><?php esc_html_e('No debug entries found.', 'wp-queuepress'); ?></p>
-				<?php else : ?>
-					<?php foreach ($entries as $entry) : ?>
-						<div style="margin:8px 0; padding:8px; border:1px solid #f0f0f1; background:#fafafa;">
-							<strong><?php echo esc_html($entry['timestamp'] ?? ''); ?></strong>
-							<pre style="white-space:pre-wrap; font-size:12px;"><?php echo esc_html(print_r($entry, true)); ?></pre>
-						</div>
-					<?php endforeach; ?>
-				<?php endif; ?>
-			</div>
-			<?php endif; ?>
 		</div><!-- .qps-connection-card -->
 		<?php
 	}

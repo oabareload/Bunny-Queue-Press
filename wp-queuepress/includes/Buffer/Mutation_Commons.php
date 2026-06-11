@@ -181,7 +181,8 @@ final class Mutation_Commons {
 
             $type_part = 'type: post';
             $link_part = '';
-            if (! empty($link_url)) {
+            $skip_link_attachment = ! empty($meta['no_link_attachment']);
+            if (! empty($link_url) && ! $skip_link_attachment) {
                 $link_json = wp_json_encode($link_url);
                 $link_part = " linkAttachment: { url: {$link_json} }";
             }

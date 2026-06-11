@@ -1438,3 +1438,394 @@ button.qps-platform:focus-visible,
 	color: #ff6b6b;
 }
 
+/* =============================================================
+   Lab — Locked state
+   ============================================================= */
+
+.qps-lab-locked {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 320px;
+	padding: 40px 20px;
+}
+
+.qps-lab-locked-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 6px;
+	box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+	max-width: 480px;
+	padding: 40px 36px;
+	text-align: center;
+	width: 100%;
+}
+
+.qps-lab-locked-icon {
+	font-size: 48px;
+	line-height: 1;
+	margin-bottom: 16px;
+}
+
+.qps-lab-locked-title {
+	font-size: 20px;
+	margin: 0 0 12px;
+}
+
+.qps-lab-locked-desc {
+	color: #646970;
+	font-size: 14px;
+	margin: 0 0 24px;
+}
+
+.qps-lab-enable-btn {
+	min-width: 180px;
+}
+
+/* Confirmation overlay */
+
+.qps-lab-overlay {
+	align-items: center;
+	background: rgba(0,0,0,0.45);
+	bottom: 0;
+	display: flex;
+	justify-content: center;
+	left: 0;
+	position: fixed;
+	right: 0;
+	top: 0;
+	z-index: 9999;
+	padding: 20px;
+}
+
+.qps-lab-overlay[hidden] {
+	display: none;
+}
+
+.qps-lab-dialog {
+	background: #fff;
+	border-radius: 6px;
+	box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+	max-width: 500px;
+	padding: 32px;
+	width: 100%;
+}
+
+.qps-lab-dialog h2 {
+	font-size: 18px;
+	margin: 0 0 16px;
+}
+
+.qps-lab-warn-list {
+	margin: 8px 0 16px 20px;
+	color: #646970;
+}
+
+.qps-lab-warn-list li {
+	margin-bottom: 4px;
+}
+
+.qps-lab-dialog-actions {
+	display: flex;
+	gap: 10px;
+	justify-content: flex-end;
+	margin-top: 24px;
+}
+
+/* =============================================================
+   Lab — Grid layout (4 cards)
+   ============================================================= */
+
+.qps-lab-grid {
+	display: grid;
+	gap: 20px;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto auto;
+}
+
+.qps-lab-card--controls   { grid-column: 1; grid-row: 1; }
+.qps-lab-card--playground { grid-column: 2; grid-row: 1; }
+.qps-lab-card--response   { grid-column: 1 / -1; grid-row: 2; }
+.qps-lab-card--console    { grid-column: 1 / -1; grid-row: 3; }
+
+.qps-lab-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 6px;
+	box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.qps-lab-card-header {
+	align-items: center;
+	background: #f6f7f7;
+	border-bottom: 1px solid #e0e0e0;
+	display: flex;
+	gap: 12px;
+	justify-content: space-between;
+	padding: 12px 20px;
+	flex-wrap: wrap;
+}
+
+.qps-lab-card-title {
+	font-size: 14px;
+	font-weight: 600;
+	margin: 0;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: #50575e;
+}
+
+.qps-lab-card-body {
+	flex: 1;
+	padding: 20px;
+}
+
+/* =============================================================
+   Lab — Controls card
+   ============================================================= */
+
+.qps-lab-control-row {
+	align-items: center;
+	display: flex;
+	gap: 12px;
+	justify-content: space-between;
+}
+
+.qps-lab-control-info {
+	align-items: center;
+	display: flex;
+	gap: 10px;
+}
+
+.qps-lab-control-status {
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 2px 8px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.qps-lab-status--on  { background: #edfaef; border: 1px solid #68de7c; color: #005c12; }
+.qps-lab-status--off { background: #f6f7f7; border: 1px solid #c3c4c7; color: #646970; }
+
+.qps-lab-divider {
+	border: 0;
+	border-top: 1px solid #f0f0f1;
+	margin: 16px 0;
+}
+
+/* =============================================================
+   Lab — Playground card
+   ============================================================= */
+
+.qps-lab-textarea {
+	background: #1e1e2e;
+	border: 1px solid #3a3a5c;
+	border-radius: 4px;
+	color: #cdd6f4;
+	display: block;
+	font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+	font-size: 13px;
+	line-height: 1.6;
+	min-height: 200px;
+	padding: 12px 14px;
+	resize: vertical;
+	tab-size: 2;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.qps-lab-textarea:focus {
+	border-color: #6c47ff;
+	box-shadow: 0 0 0 1px #6c47ff;
+	outline: none;
+}
+
+.qps-lab-toolbar {
+	align-items: center;
+	display: flex;
+	gap: 12px;
+	margin-top: 12px;
+	flex-wrap: wrap;
+}
+
+.qps-lab-log-toggle {
+	align-items: center;
+	color: #646970;
+	cursor: pointer;
+	display: inline-flex;
+	font-size: 13px;
+	gap: 6px;
+}
+
+.qps-lab-error-msg {
+	background: #fff0f0;
+	border: 1px solid #f3c6c6;
+	border-radius: 4px;
+	color: #b32d2e;
+	font-size: 13px;
+	margin-top: 12px;
+	padding: 8px 12px;
+}
+
+/* =============================================================
+   Lab — Response Viewer card
+   ============================================================= */
+
+.qps-lab-results-empty {
+	align-items: center;
+	border: 1px dashed #c3c4c7;
+	border-radius: 4px;
+	color: #8c8f94;
+	display: flex;
+	font-size: 13px;
+	justify-content: center;
+	min-height: 80px;
+	padding: 20px;
+	text-align: center;
+}
+
+.qps-lab-metadata {
+	align-items: center;
+	display: flex;
+	gap: 16px;
+	flex-wrap: wrap;
+	margin-bottom: 14px;
+}
+
+.qps-lab-meta-item {
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.qps-lab-status--ok  { color: #008a20; }
+.qps-lab-status--err { color: #b32d2e; }
+
+.qps-lab-results-grid {
+	display: grid;
+	gap: 16px;
+	grid-template-columns: 1fr 1fr;
+}
+
+.qps-lab-result-panel h3 {
+	color: #50575e;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	margin: 0 0 6px;
+	text-transform: uppercase;
+}
+
+.qps-lab-pre {
+	background: #1e1e2e;
+	border: 1px solid #3a3a5c;
+	border-radius: 4px;
+	color: #cdd6f4;
+	font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+	font-size: 12px;
+	line-height: 1.6;
+	max-height: 360px;
+	overflow: auto;
+	padding: 12px 14px;
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+/* =============================================================
+   Lab — Debug Console card
+   ============================================================= */
+
+.qps-lab-console-toolbar {
+	align-items: center;
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.qps-lab-console-feedback {
+	font-size: 12px;
+	margin-left: 4px;
+}
+
+.qps-lab-log {
+	max-height: 560px;
+	overflow-y: auto;
+	padding-right: 4px;
+}
+
+.qps-lab-log-empty {
+	color: #8c8f94;
+	font-size: 13px;
+	margin: 0;
+	padding: 16px 0;
+}
+
+.qps-lab-log-entry {
+	border: 1px solid #e0e0e0;
+	border-radius: 4px;
+	margin-bottom: 12px;
+	overflow: hidden;
+}
+
+.qps-lab-log-entry-header {
+	align-items: center;
+	background: #f6f7f7;
+	border-bottom: 1px solid #e0e0e0;
+	display: flex;
+	gap: 10px;
+	padding: 6px 12px;
+	flex-wrap: wrap;
+}
+
+.qps-lab-log-ts {
+	color: #1d2327;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.qps-lab-log-type {
+	background: #f0f0f1;
+	border-radius: 3px;
+	color: #50575e;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 1px 6px;
+	text-transform: uppercase;
+}
+
+.qps-lab-log-status {
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 1px 7px;
+}
+
+.qps-lab-log-status--ok  { background: #edfaef; color: #005c12; }
+.qps-lab-log-status--err { background: #fff0f0; color: #b32d2e; }
+
+.qps-lab-log-entry-body {
+	border: 0;
+	border-radius: 0;
+	max-height: 260px;
+}
+
+@media screen and (max-width: 960px) {
+	.qps-lab-grid {
+		grid-template-columns: 1fr;
+	}
+	.qps-lab-card--controls,
+	.qps-lab-card--playground,
+	.qps-lab-card--response,
+	.qps-lab-card--console {
+		grid-column: 1;
+		grid-row: auto;
+	}
+	.qps-lab-results-grid {
+		grid-template-columns: 1fr;
+	}
+}
+

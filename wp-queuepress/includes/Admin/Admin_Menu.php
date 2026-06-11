@@ -46,18 +46,27 @@ final class Admin_Menu {
 	private Buffer_Page $buffer_page;
 
 	/**
+	 * Lab page controller.
+	 *
+	 * @var Lab_Page
+	 */
+	private Lab_Page $lab_page;
+
+	/**
 	 * Builds the admin menu controller.
 	 *
 	 * @param Settings_Page  $settings_page  Settings page controller.
 	 * @param Calendar_Page  $calendar_page  Calendar page controller.
 	 * @param Pipeline_Page  $pipeline_page  Pipeline page controller.
 	 * @param Buffer_Page    $buffer_page    Buffer page controller.
+	 * @param Lab_Page       $lab_page       Lab page controller.
 	 */
-	public function __construct(Settings_Page $settings_page, Calendar_Page $calendar_page, Pipeline_Page $pipeline_page, Buffer_Page $buffer_page) {
+	public function __construct(Settings_Page $settings_page, Calendar_Page $calendar_page, Pipeline_Page $pipeline_page, Buffer_Page $buffer_page, Lab_Page $lab_page) {
 		$this->settings_page  = $settings_page;
 		$this->calendar_page  = $calendar_page;
 		$this->pipeline_page = $pipeline_page;
 		$this->buffer_page   = $buffer_page;
+		$this->lab_page      = $lab_page;
 	}
 
 	/**
@@ -121,6 +130,15 @@ final class Admin_Menu {
 			'qps-buffer',
 			array($this->buffer_page, 'render')
 		);
+
+		add_submenu_page(
+			'qps-pipeline',
+			__('Lab', 'wp-queuepress'),
+			__('Lab', 'wp-queuepress'),
+			'manage_options',
+			'qps-lab',
+			array($this->lab_page, 'render')
+		);
 	}
 
 	/**
@@ -137,9 +155,10 @@ final class Admin_Menu {
 			'qps-pipeline_page_qps-calendar',
 			'qps-pipeline_page_qps-settings',
 			'qps-pipeline_page_qps-buffer',
+			'qps-pipeline_page_qps-lab',
 		);
 
-		if (! in_array($hook_suffix, $allowed_hooks, true) && ! in_array($current_page, array('qps-pipeline', 'qps-calendar', 'qps-settings', 'qps-buffer'), true)) {
+		if (! in_array($hook_suffix, $allowed_hooks, true) && ! in_array($current_page, array('qps-pipeline', 'qps-calendar', 'qps-settings', 'qps-buffer', 'qps-lab'), true)) {
 			return;
 		}
 
@@ -207,6 +226,40 @@ final class Admin_Menu {
 							'deleteConfirm' => __('Delete all Buffer publications for this post?', 'wp-queuepress'),
 							'error'         => __('Error sending to Buffer.', 'wp-queuepress'),
 							'networkError'  => __('Network error. Please try again.', 'wp-queuepress'),
+						),
+					)
+				);
+			}
+
+			if ('qps-lab' === $current_page || 'qps-pipeline_page_qps-lab' === $hook_suffix) {
+				wp_enqueue_script(
+					'wp-queuepress-lab',
+					WP_QUEUEPRESS_PLUGIN_URL . 'assets/js/lab.js',
+					array(),
+					WP_QUEUEPRESS_VERSION,
+					true
+				);
+				wp_localize_script(
+					'wp-queuepress-lab',
+					'qpsLab',
+					array(
+						'ajaxUrl'      => admin_url('admin-ajax.php'),
+						'labEnabled'   => (bool) get_option('qps_lab_enabled', false),
+						'nonceExecute' => wp_create_nonce('qps_lab_execute_graphql'),
+						'nonceClear'   => wp_create_nonce('qps_lab_clear_log'),
+						'nonceToggle'  => wp_create_nonce('qps_lab_toggle_mode'),
+						'nonceDebug'   => wp_create_nonce('qps_lab_save_debug'),
+						'i18n'         => array(
+							'execute'        => __('Execute GraphQL', 'wp-queuepress'),
+							'executing'      => __('Executing…', 'wp-queuepress'),
+							'emptyInput'     => __('Please enter a GraphQL query or mutation.', 'wp-queuepress'),
+							'clearConfirm'   => __('Clear the entire debug log? This cannot be undone.', 'wp-queuepress'),
+							'logCleared'     => __('Log cleared.', 'wp-queuepress'),
+							'networkError'   => __('Network error. Please try again.', 'wp-queuepress'),
+							'unknownError'   => __('An unexpected error occurred.', 'wp-queuepress'),
+							'labDisabled'    => __('Lab Mode disabled. Reload to return to the locked state.', 'wp-queuepress'),
+							'debugEnabled'   => __('Enabled', 'wp-queuepress'),
+							'debugDisabled'  => __('Disabled', 'wp-queuepress'),
 						),
 					)
 				);
