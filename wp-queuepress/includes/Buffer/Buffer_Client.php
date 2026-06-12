@@ -320,20 +320,20 @@ final class Buffer_Client {
 			);
 		}
 		$mutation = sprintf(
-			'mutation { deletePost(input: { id: "%s" }) { ... on DeletePostSuccess { post { id } } ... on MutationError { message } } }',
+			'mutation { deletePost(input: { id: "%s" }) { ... on DeletePostSuccess { id } ... on VoidMutationError { message } } }',
 			esc_js($post_id)
 		);
 		$response = $this->mutate($mutation);
 
 		$delete_post = $response['data']['deletePost'] ?? null;
-		// Success path: DeletePostSuccess resolves to { post: { id } }.
-		if (is_array($delete_post) && isset($delete_post['post']['id']) && (string) $delete_post['post']['id'] !== '') {
+		// Success path: DeletePostSuccess resolves to { id }.
+		if (is_array($delete_post) && isset($delete_post['id']) && (string) $delete_post['id'] !== '') {
 			return array(
 				'success' => true,
-				'post_id' => (string) $delete_post['post']['id'],
+				'post_id' => (string) $delete_post['id'],
 			);
 		}
-		// Error path: MutationError resolves to { message }.
+		// Error path: VoidMutationError resolves to { message }.
 		if (is_array($delete_post) && isset($delete_post['message'])) {
 			return array(
 				'success' => false,

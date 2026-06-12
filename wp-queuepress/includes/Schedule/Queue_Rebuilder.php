@@ -196,6 +196,76 @@ final class Queue_Rebuilder {
     }
 
     /**
+     * Computes a swap plan between two future posts.
+     *
+     * Exchanges the post_date of the two posts. The result is a 2-item plan
+     * in the exact shape consumed by apply_plan(): no row is added or removed
+     * from the queue, only two timestamps are permuted.
+     *
+     * The plan is compute-only; nothing is written to the database. No call
+     * to wp_update_post is made here.
+     *
+     * Validation (short-circuits on first failure, returns []):
+     *  - Both IDs must be > 0.
+     *  - IDs must be different.
+     *  - Both posts must exist.
+     *  - Both must be in 'future' status.
+     *  - Both must share the same post_type.
+     *  - Both post_date values must be different (defensive).
+     *
+     * @param int $post_a_id First post ID.
+     * @param int $post_b_id Second post ID.
+     * @return array<int,array<string,mixed>> Plan items in apply_plan() shape, or [] on rejection.
+     */
+    public function compute_swap_plan(int $post_a_id, int $post_b_id): array {
+        if ($post_a_id <= 0 || $post_b_id <= 0) {
+            return array();
+        }
+
+        if ($post_a_id === $post_b_id) {
+            return array();
+        }
+
+        clean_post_cache($post_a_id);
+        clean_post_cache($post_b_id);
+
+        $post_a = get_post($post_a_id);
+        $post_b = get_post($post_b_id);
+
+        if (! $post_a instanceof WP_Post || ! $post_b instanceof WP_Post) {
+            return array();
+        }
+
+        if ('future' !== $post_a->post_status || 'future' !== $post_b->post_status) {
+            return array();
+        }
+
+        if ($post_a->post_type !== $post_b->post_type) {
+            return array();
+        }
+
+        if ((string) $post_a->post_date === (string) $post_b->post_date) {
+            return array();
+        }
+
+        $a_old = (string) $post_a->post_date;
+        $b_old = (string) $post_b->post_date;
+
+        return array(
+            array(
+                'post_id'  => (int) $post_a->ID,
+                'old_date' => $a_old,
+                'new_date' => $b_old,
+            ),
+            array(
+                'post_id'  => (int) $post_b->ID,
+                'old_date' => $b_old,
+                'new_date' => $a_old,
+            ),
+        );
+    }
+
+    /**
      * Computes an Add First plan with the new post inserted at the front.
      *
      * Runs AFTER the new post is already `future` in the DB (called from
@@ -328,15 +398,39 @@ final class Queue_Rebuilder {
                 continue;
             }
 
-            // Do NOT pass post_status here: wp_update_post derives it automatically
-            // from post_date_gmt vs now. Passing 'future' explicitly can confuse
-            // WordPress when the existing status is already 'future' and causes
-            // the update to be silently skipped on some versions.
+            // Safety gate: re-read the post from the DB immediately before writing
+            // to catch any status change that occurred between plan computation and
+            // now (e.g. another process published it, or a swap of a near-term post
+            // whose date slipped into the past).
+            clean_post_cache($post_id);
+            $fresh_post = get_post($post_id);
+            if (! $fresh_post instanceof WP_Post || 'future' !== $fresh_post->post_status) {
+                $results['conflicts'][] = array(
+                    'post_id' => $post_id,
+                    'message' => 'Post is no longer future at write time — skipped to prevent accidental publication.',
+                    'status'  => $fresh_post instanceof WP_Post ? $fresh_post->post_status : 'missing',
+                );
+                continue;
+            }
+
+            // Guard: new_date must be strictly in the future. If the date has
+            // already passed (e.g. race condition on a near-term post), WordPress
+            // would silently derive post_status='publish'. Skip instead.
+            $new_date_gmt = get_gmt_from_date($new_date_local);
+            if (strtotime($new_date_gmt) <= time()) {
+                $results['conflicts'][] = array(
+                    'post_id'      => $post_id,
+                    'message'      => 'new_date is not in the future — skipped to prevent accidental publication.',
+                    'new_date_gmt' => $new_date_gmt,
+                );
+                continue;
+            }
+
             $update = wp_update_post(
                 array(
                     'ID'            => $post_id,
                     'post_date'     => $new_date_local,
-                    'post_date_gmt' => get_gmt_from_date($new_date_local),
+                    'post_date_gmt' => $new_date_gmt,
                 ),
                 true
             );

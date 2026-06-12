@@ -33,6 +33,10 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 - Buffer integration for publishing to Instagram, X/Twitter, and Threads
 - Per-platform resend from the Pipeline without re-publishing to all channels
 - Delete Buffer publications directly from the Pipeline action menu
+- Future queue reordering via position swap: Move Down action and Drag & Drop
+- Move Down moves a scheduled post one position lower by swapping dates with the next post
+- Drag & Drop on the Future column performs a date swap between the dragged card and the drop target
+- No index rebuilding or multi-post shifting during reorder operations
 
 ## Workflow
 
@@ -226,6 +230,50 @@ On subsequent requests the guard condition (`$current >= CURRENT_SCHEMA_VERSION`
 ---
 
 ## Changelog
+
+### 2.4.1
+
+**Fixed**
+
+- Fixed Move Down failing silently when the next post belongs to a different day group. Navigation now operates on a flat DOM list of all scheduled cards across all day groups, eliminating the `<ul>` boundary limitation.
+- Fixed potential accidental publication of posts during queue reordering. `apply_plan()` now validates that the resolved `new_date` is strictly in the future (GMT) before calling `wp_update_post()`. If the date has already passed, the item is skipped and recorded as a conflict.
+- Fixed `apply_plan()` re-reading the post status from the database immediately before writing. If the post is no longer `future` at write time (e.g. published by another process between plan computation and execution), the update is skipped entirely.
+- Fixed drag-and-drop highlight flickering when the cursor moved over child elements inside a card. The `dragleave` handler now uses `card.contains(e.relatedTarget)` to distinguish genuine card exits from internal child transitions.
+- Fixed stale `dragSourceId` state if a second drop event fired before the async swap response completed. The source ID is now cleared synchronously on `drop` before the fetch call.
+
+**Added**
+
+- Added **Move Up** action to the Pipeline action menu for scheduled posts. Swaps the current post with the previous post in the Scheduled queue. Hidden on the first scheduled post.
+- Added **Move Top** action to the Pipeline action menu for scheduled posts. Swaps the current post with the first post in the Scheduled queue. Hidden on the first scheduled post.
+- Added a visual drag handle (six-dot icon) in the top-left corner of each draggable card. The handle appears on hover and during drag. Cursor changes to `grab` on hover and `grabbing` during drag.
+- Added drop target highlight (purple outline) on cards during drag-over to make the swap target visually unambiguous.
+
+### 2.4.0
+
+**New**
+
+- Added `Queue_Rebuilder::compute_swap_plan()` — a backend primitive that computes a two-item plan swapping the `post_date` values of two `future` posts without touching any other posts in the queue.
+- Added REST endpoint `POST /wp-queuepress/v1/posts/swap` accepting `{ source, target }` post IDs. Calls `compute_swap_plan()` and `apply_plan()`. Protected by `can_swap_posts()` permission callback requiring `edit_post` and `publish_posts` capability on both posts.
+- Added **Move Down** action to the Pipeline action menu (⋮) for scheduled posts. Swaps the current post with the next post in the Future column by calling the swap endpoint. Hidden on the last scheduled post.
+- Added **Drag & Drop** reordering on the Future column. Dragging a card and dropping it onto another card triggers a swap between those two posts — identical in behavior and backend call to Move Down. No index math, no multi-post shifting.
+- Added `draggable="true"` and `qps-card--draggable` markup to scheduled cards. HTML5 native drag-and-drop API is used; no external library dependency introduced.
+- Added `arrow-down` SVG icon to the Pipeline icon set for the Move Down action.
+
+**Behavior**
+
+- Swap is strictly a two-post date exchange. No other posts in the queue are affected.
+- Move Down and Drag & Drop are functionally identical — both resolve to `POST /posts/swap { source, target }`.
+- The Pipeline reloads after a successful swap so group headers and card order reflect the authoritative server state.
+- Move Down is hidden on the last card in the Future column. No affordance is shown when there is no next post to swap with.
+- Drag & Drop is restricted to the Future column only. Draft and Published columns are not draggable.
+- Buffer records, channel configuration, Add First, and Add to Queue behavior are not affected.
+
+**Architecture**
+
+- `Queue_Rebuilder::compute_swap_plan(int $source, int $target): array` — validates both posts are `future`, reads their current `post_date` values, and returns a two-item plan with dates exchanged.
+- `Queue_Controller::post_swap()` — REST handler. Delegates entirely to `compute_swap_plan()` + `apply_plan()`.
+- `Pipeline_Page` computes `$swap_flags` (first/last position in flattened ordered queue) server-side. Cards receive `draggable` attribute and Move Down button based on these flags — no client-side position computation.
+- `pipeline-buffer.js` — `callSwap()`, `initMoveDown()`, and `initDragDrop()` are additive. No existing handler was modified.
 
 ### 2.3.0
 

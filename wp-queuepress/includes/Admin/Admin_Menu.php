@@ -216,8 +216,10 @@ final class Admin_Menu {
 					'wp-queuepress-pipeline-buffer',
 					'qpsPipelineBuffer',
 					array(
-						'ajaxUrl' => admin_url('admin-ajax.php'),
-						'i18n'    => array(
+						'ajaxUrl'   => admin_url('admin-ajax.php'),
+						'restUrl'   => esc_url_raw( rest_url( 'wp-queuepress/v1/' ) ),
+						'restNonce' => wp_create_nonce( 'wp_rest' ),
+						'i18n'      => array(
 							'sending'       => __('Sending…', 'wp-queuepress'),
 							'sent'          => __('Sent', 'wp-queuepress'),
 							'published'     => __('Published', 'wp-queuepress'),
@@ -226,6 +228,9 @@ final class Admin_Menu {
 							'deleteConfirm' => __('Delete all Buffer publications for this post?', 'wp-queuepress'),
 							'error'         => __('Error sending to Buffer.', 'wp-queuepress'),
 							'networkError'  => __('Network error. Please try again.', 'wp-queuepress'),
+							'moving'        => __('Moving…', 'wp-queuepress'),
+							'swapSuccess'   => __('Schedule updated.', 'wp-queuepress'),
+							'swapError'     => __('Could not swap. Please reload and try again.', 'wp-queuepress'),
 						),
 					)
 				);

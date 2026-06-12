@@ -126,6 +126,144 @@ final class Queue_Controller {
 				),
 			)
 		);
+
+		register_rest_route(
+			self::REST_NAMESPACE,
+			'/posts/swap',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array($this, 'post_swap'),
+				'permission_callback' => array($this, 'can_swap_posts'),
+				'args'                => array(
+					'source' => array(
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+					),
+					'target' => array(
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Verifies that the current user can swap the source and target posts.
+	 *
+	 * Both posts must be editable and publishable by the current user.
+	 *
+	 * @param \WP_REST_Request $request REST request.
+	 * @return bool|\WP_Error
+	 */
+	public function can_swap_posts(\WP_REST_Request $request) {
+		$source = isset($request['source']) ? (int) $request['source'] : 0;
+		$target = isset($request['target']) ? (int) $request['target'] : 0;
+
+		if ($source <= 0 || $target <= 0) {
+			return new \WP_Error(
+				'wp_queuepress_invalid_args',
+				__('source and target must be positive integers.', 'wp-queuepress'),
+				array('status' => 400)
+			);
+		}
+
+		if ($source === $target) {
+			return new \WP_Error(
+				'wp_queuepress_invalid_args',
+				__('source and target must be different posts.', 'wp-queuepress'),
+				array('status' => 400)
+			);
+		}
+
+		$source_check = $this->verify_post_eligible($source);
+		if (is_wp_error($source_check)) {
+			return $source_check;
+		}
+
+		$target_check = $this->verify_post_eligible($target);
+		if (is_wp_error($target_check)) {
+			return $target_check;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Verifies a single post exists, is not autosave/revision, and that the
+	 * current user can edit and publish it.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool|\WP_Error
+	 */
+	private function verify_post_eligible(int $post_id) {
+		$post = get_post($post_id);
+
+		if (! $post instanceof \WP_Post || wp_is_post_autosave($post_id) || wp_is_post_revision($post_id)) {
+			return new \WP_Error(
+				'wp_queuepress_invalid_post',
+				__('This post cannot be queued for publishing.', 'wp-queuepress'),
+				array('status' => 400)
+			);
+		}
+
+		$post_type = get_post_type_object($post->post_type);
+
+		if (! current_user_can('edit_post', $post_id)) {
+			return new \WP_Error(
+				'wp_queuepress_forbidden',
+				__('You are not allowed to edit this post.', 'wp-queuepress'),
+				array('status' => 403)
+			);
+		}
+
+		if (! $post_type || empty($post_type->cap->publish_posts) || ! current_user_can($post_type->cap->publish_posts)) {
+			return new \WP_Error(
+				'wp_queuepress_forbidden',
+				__('You are not allowed to publish this post type.', 'wp-queuepress'),
+				array('status' => 403)
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Swaps the publishing dates of two future posts.
+	 *
+	 * The endpoint is the single backend primitive for queue reordering. Any
+	 * higher-level UI concept (Move Up, Move Down, Drag & Drop) is built on
+	 * top of this endpoint by the caller, which is responsible for resolving
+	 * which two post IDs to swap.
+	 *
+	 * @param \WP_REST_Request $request REST request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function post_swap(\WP_REST_Request $request) {
+		$source = (int) $request['source'];
+		$target = (int) $request['target'];
+
+		$plan = $this->queue_rebuilder->compute_swap_plan($source, $target);
+
+		if (empty($plan)) {
+			return new \WP_Error(
+				'wp_queuepress_swap_rejected',
+				__('Swap cannot be performed for the given posts.', 'wp-queuepress'),
+				array('status' => 404)
+			);
+		}
+
+		$result = $this->queue_rebuilder->apply_plan($plan);
+
+		return rest_ensure_response(
+			array(
+				'plan'      => $plan,
+				'applied'   => $result['applied'],
+				'conflicts' => $result['conflicts'],
+			)
+		);
 	}
 
 	/**

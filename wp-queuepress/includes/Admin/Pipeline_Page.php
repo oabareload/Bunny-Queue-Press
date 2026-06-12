@@ -107,7 +107,15 @@ final class Pipeline_Page {
 			$this->post_query->get_posts_between('draft', $published_from, $now),
 			$now
 		);
+		// Flatten scheduled groups so the Pipeline UI can compute first/last
+		// at the card level for Move Down affordance. The grouping by day is
+		// preserved visually in render_scheduled_groups().
 		$scheduled_posts = $this->post_query->get_posts_between('future', $now, $future_window);
+		$scheduled_groups = $this->group_posts_by_day($scheduled_posts, $timezone);
+		$flat_scheduled   = array();
+		foreach ($scheduled_groups as $day_posts) {
+			foreach ($day_posts as $p) { $flat_scheduled[] = $p; }
+		}
 		$published_query = new \WP_Query(
 			array(
 				'post_type'              => 'post',
@@ -159,7 +167,7 @@ final class Pipeline_Page {
 						<p><?php echo esc_html__('Future scheduled posts for the coming weeks.', 'wp-queuepress'); ?></p>
 					</header>
 					<div class="qps-pipeline-column-body">
-						<?php $this->render_grouped_post_column($scheduled_groups, $timezone, __('No scheduled posts found.', 'wp-queuepress')); ?>
+						<?php $this->render_grouped_post_column($scheduled_groups, $timezone, __('No scheduled posts found.', 'wp-queuepress'), 'scheduled'); ?>
 					</div>
 				</section>
 
@@ -224,15 +232,35 @@ final class Pipeline_Page {
 	/**
 	 * Renders a grouped post column.
 	 *
-	 * @param array<string,array<int,\WP_Post>> $groups Grouped posts by day.
-	 * @param DateTimeZone                      $timezone Site timezone.
+	 * @param array<string,array<int,\WP_Post>> $groups        Grouped posts by day.
+	 * @param DateTimeZone                      $timezone      Site timezone.
 	 * @param string                            $empty_message Empty state message.
+	 * @param string                            $section       Section identifier. Only 'scheduled'
+	 *                                                          enables Move Down / drag&drop affordances.
 	 * @return void
 	 */
-	private function render_grouped_post_column(array $groups, DateTimeZone $timezone, string $empty_message): void {
+	private function render_grouped_post_column(array $groups, DateTimeZone $timezone, string $empty_message, string $section = ''): void {
 		if (empty($groups)) {
 			$this->render_empty_state($empty_message);
 			return;
+		}
+
+		// Build the swap affordance flags per post ID for the 'scheduled' section.
+		// Flags: 'first' / 'last' indicate first/last in the FLATTENED scheduled queue,
+		// so Move First / Move Down can be hidden accordingly.
+		$swap_flags = array();
+		if ('scheduled' === $section) {
+			$flat = array();
+			foreach ($groups as $day_posts) {
+				foreach ($day_posts as $p) { $flat[] = (int) $p->ID; }
+			}
+			$count = count($flat);
+			foreach ($flat as $i => $pid) {
+			$swap_flags[$pid] = array(
+					'first' => (0 === $i),
+					'last'  => ($i === $count - 1),
+				);
+			}
 		}
 
 		foreach ($groups as $day_label => $posts) {
@@ -242,8 +270,8 @@ final class Pipeline_Page {
 					<strong><?php echo esc_html($day_label); ?></strong>
 					<span><?php echo esc_html(sprintf('%s %s', count($posts), _n('item', 'items', count($posts), 'wp-queuepress'))); ?></span>
 				</div>
-				<ul class="qps-card-list">
-					<?php $this->render_post_cards($posts, $timezone, true); ?>
+				<ul class="qps-card-list"<?php echo 'scheduled' === $section ? ' data-qps-swap-section="scheduled"' : ''; ?>>
+					<?php $this->render_post_cards($posts, $timezone, true, 'scheduled' === $section ? $swap_flags : array()); ?>
 				</ul>
 			</div>
 			<?php
@@ -264,12 +292,14 @@ final class Pipeline_Page {
 	 * The list of platforms is read from Platform_Registry — there is no
 	 * hardcoded list in this method.
 	 *
-	 * @param array<int,\WP_Post> $posts     Posts to render.
-	 * @param DateTimeZone        $timezone  Site timezone.
-	 * @param bool                $show_time Whether to show post time.
+	 * @param array<int,\WP_Post>     $posts      Posts to render.
+	 * @param DateTimeZone            $timezone   Site timezone.
+	 * @param bool                    $show_time  Whether to show post time.
+	 * @param array<int,array{first:bool,last:bool}> $swap_flags Per-post swap affordance flags.
+	 *                                                  Non-empty only for the 'scheduled' section.
 	 * @return void
 	 */
-	private function render_post_cards(array $posts, DateTimeZone $timezone, bool $show_time): void {
+	private function render_post_cards(array $posts, DateTimeZone $timezone, bool $show_time, array $swap_flags = array()): void {
 		// Determine which platform slugs have at least one enabled channel.
 		// This drives icon clickability independently of saved Buffer records.
 		$channel_config = new Channel_Config();
@@ -279,7 +309,8 @@ final class Pipeline_Page {
 			$post_time     = new DateTimeImmutable($post->post_date, $timezone);
 			$edit_url      = get_edit_post_link($post->ID);
 			$permalink     = (string) get_permalink($post->ID);
-			$title         = get_the_title($post) ?: __('(no title)', 'wp-queuepress');
+			$_t = get_the_title($post);
+			$title         = ( '' !== $_t && null !== $_t ) ? $_t : __('(no title)', 'wp-queuepress');
 			$status        = $this->get_post_status_label($post->post_status);
 			$thumbnail     = get_the_post_thumbnail_url($post, array(180, 180));
 			$channels_meta = get_post_meta($post->ID, Buffer_Ajax::META_KEY, true);
@@ -308,15 +339,31 @@ final class Pipeline_Page {
 					break;
 				}
 			}
+
+			// Swap affordance flags for the 'scheduled' section only.
+			$pid_key        = (int) $post->ID;
+			$flags          = ! empty($swap_flags[$pid_key]) ? $swap_flags[$pid_key] : array();
+			$show_move_down = ! empty($flags) && empty($flags['last']);
+			$show_move_up   = ! empty($flags) && empty($flags['first']);
+			$show_move_top  = ! empty($flags) && empty($flags['first']);
+			$is_draggable_scheduled   = ! empty($swap_flags) && isset($swap_flags[$pid_key]);
+			$li_classes               = 'qps-card';
+			if ($is_draggable_scheduled) { $li_classes .= ' qps-card--draggable'; }
 			?>
-			<li class="qps-card">
+			<li class="<?php echo esc_attr($li_classes); ?>"
+			    data-post-id="<?php echo esc_attr((string) $post->ID); ?>"
+			    <?php echo $is_draggable_scheduled ? 'draggable="true"' : ''; ?>>
 				<div class="qps-card-inner">
 					<div class="qps-card-image<?php echo $thumbnail ? '' : ' qps-card-image--placeholder'; ?>">
-						<?php if ($thumbnail) : ?>
-							<img src="<?php echo esc_url($thumbnail); ?>" alt="<?php echo esc_attr($title); ?>" />
-						<?php else : ?>
-							<span class="qps-card-image-placeholder" aria-hidden="true"><?php echo $this->render_icon('image'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
-						<?php endif; ?>
+					<?php if ($thumbnail) : ?>
+					<img src="<?php echo esc_url($thumbnail); ?>" alt="<?php echo esc_attr($title); ?>" />
+					<?php else : ?>
+					<span class="qps-card-image-placeholder" aria-hidden="true"><?php echo $this->render_icon('image'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+					<?php endif; ?>
+
+					<?php if ($is_draggable_scheduled) : ?>
+					<span class="qps-drag-handle" aria-hidden="true" title="<?php esc_attr_e('Drag to reorder', 'wp-queuepress'); ?>"><?php echo $this->render_icon('drag'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+					<?php endif; ?>
 
 						<!-- Action menu overlay (top-right of the image) -->
 						<div class="qps-image-menu">
@@ -357,6 +404,45 @@ final class Pipeline_Page {
 											<?php echo $this->render_icon('view'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 											<span><?php esc_html_e('View Post', 'wp-queuepress'); ?></span>
 										</a>
+									</li>
+								<?php endif; ?>
+								<?php if ($show_move_top) : ?>
+								<li role="none">
+									<button
+										type="button"
+										role="menuitem"
+										class="qps-image-menu-item qps-move-top"
+										data-post-id="<?php echo esc_attr((string) $post->ID); ?>"
+									>
+										<?php echo $this->render_icon('arrow-top'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+										<span><?php esc_html_e('Move Top', 'wp-queuepress'); ?></span>
+									</button>
+								</li>
+							<?php endif; ?>
+							<?php if ($show_move_up) : ?>
+								<li role="none">
+									<button
+										type="button"
+										role="menuitem"
+										class="qps-image-menu-item qps-move-up"
+										data-post-id="<?php echo esc_attr((string) $post->ID); ?>"
+									>
+										<?php echo $this->render_icon('arrow-up'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+										<span><?php esc_html_e('Move Up', 'wp-queuepress'); ?></span>
+									</button>
+								</li>
+							<?php endif; ?>
+							<?php if ($show_move_down) : ?>
+									<li role="none">
+										<button
+											type="button"
+											role="menuitem"
+											class="qps-image-menu-item qps-move-down"
+											data-post-id="<?php echo esc_attr((string) $post->ID); ?>"
+										>
+											<?php echo $this->render_icon('arrow-down'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+											<span><?php esc_html_e('Move Down', 'wp-queuepress'); ?></span>
+										</button>
 									</li>
 								<?php endif; ?>
 								<?php if ($has_buffer_state) : ?>
@@ -499,6 +585,27 @@ final class Pipeline_Page {
 					. '<rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/>'
 					. '<circle cx="9" cy="10" r="1.5" fill="currentColor"/>'
 					. '<path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M4 18l5-5 4 4 3-3 4 4"/>'
+					. '</svg>';
+			case 'arrow-down':
+				return '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+					. '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M6 13l6 6 6-6"/>'
+					. '</svg>';
+			case 'arrow-up':
+				return '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+					. '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 19V5M6 11l6-6 6 6"/>'
+					. '</svg>';
+			case 'arrow-top':
+				return '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+					. '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 19V7M6 13l6-6 6 6M4 4h16"/>'
+					. '</svg>';
+			case 'drag':
+				return '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+					. '<circle cx="9" cy="6"  r="1.4" fill="currentColor"/>'
+					. '<circle cx="15" cy="6"  r="1.4" fill="currentColor"/>'
+					. '<circle cx="9" cy="12" r="1.4" fill="currentColor"/>'
+					. '<circle cx="15" cy="12" r="1.4" fill="currentColor"/>'
+					. '<circle cx="9" cy="18" r="1.4" fill="currentColor"/>'
+					. '<circle cx="15" cy="18" r="1.4" fill="currentColor"/>'
 					. '</svg>';
 			default:
 				return '';

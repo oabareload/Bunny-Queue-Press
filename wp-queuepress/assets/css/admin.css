@@ -1439,6 +1439,50 @@ button.qps-platform:focus-visible,
 }
 
 /* =============================================================
+   Pipeline — Drag & Drop UX
+   ============================================================= */
+
+/* Six-dot drag handle — top-left of the image overlay on draggable cards */
+.qps-drag-handle {
+	align-items: center;
+	background: rgba(0,0,0,0.45);
+	border-radius: 4px;
+	color: #fff;
+	cursor: grab;
+	display: flex;
+	height: 28px;
+	justify-content: center;
+	left: 6px;
+	opacity: 0;
+	position: absolute;
+	top: 6px;
+	transition: opacity 0.15s ease;
+	width: 28px;
+	z-index: 4;
+}
+
+.qps-card--draggable:hover .qps-drag-handle,
+.qps-card--dragging .qps-drag-handle {
+	opacity: 1;
+}
+
+/* Grabbing cursor while a drag is in progress */
+.qps-card--dragging {
+	cursor: grabbing;
+	opacity: 0.55;
+}
+
+.qps-card--dragging * {
+	cursor: grabbing;
+}
+
+/* Highlight on the drop target */
+.qps-card--drag-over {
+	box-shadow: 0 0 0 2px #6c47ff, inset 0 0 0 2px rgba(108,71,255,0.12);
+	transition: box-shadow 0.1s ease;
+}
+
+/* =============================================================
    Lab — Locked state
    ============================================================= */
 
