@@ -231,6 +231,24 @@ On subsequent requests the guard condition (`$current >= CURRENT_SCHEMA_VERSION`
 
 ## Changelog
 
+### 2.4.2
+
+**Fixed**
+
+- Fixed Move Down failing silently when the next post belongs to a different day group. Card navigation now uses a flat `querySelectorAll` list across all day groups instead of `nextElementSibling`, which cannot cross `<ul>` boundaries.
+- Fixed a time-comparison inconsistency in `apply_plan()` that caused valid future dates to be rejected as past dates during a swap. The comparison now uses `DateTimeImmutable` objects in UTC throughout, eliminating ambiguity from `strtotime()` and PHP's `date.timezone` INI setting.
+- Fixed drag-and-drop `dragleave` highlight flickering when the cursor passed over child elements inside a card. The handler now uses `card.contains(e.relatedTarget)` to distinguish genuine card exits from internal child transitions.
+- Fixed stale `dragSourceId` state when a second `drop` event fired before the async swap response completed. The source ID is now cleared synchronously on `drop` before the fetch call.
+
+**Added**
+
+- Added **Move Up** action to the Pipeline action menu for scheduled posts. Swaps the current post with the previous post in the Scheduled queue. Hidden on the first scheduled post.
+- Added **Move Top** action to the Pipeline action menu for scheduled posts. Swaps the current post with the first post in the Scheduled queue. Hidden on the first scheduled post.
+- Added a visual drag handle (six-dot icon, `cursor: grab`) in the top-left corner of each draggable card. Appears on hover and during drag. Cursor changes to `grabbing` during active drag.
+- Added drop-target highlight (purple outline) on cards during drag-over to make the swap target visually unambiguous.
+- Added a **Copy** button per log entry in the Lab Debug Console. Uses the native Clipboard API with an `execCommand` fallback. Copies the full JSON content of that entry to the clipboard and shows a transient `✓ Copied` confirmation.
+- Added auto-publish to Buffer when a scheduled post transitions from `future` to `publish` (i.e. WordPress publishes it automatically at its scheduled time). Only fires if no prior Buffer publication attempt has been recorded for the post. If any record exists under `_queuepress_buffer_channels`, the transition is skipped entirely — no partial retries.
+
 ### 2.4.1
 
 **Fixed**

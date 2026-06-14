@@ -257,6 +257,44 @@
 		});
 	}
 
+	// ── Debug Console — Copy individual log entry ────────────────────────────
+
+	document.addEventListener('click', function (e) {
+		var btn = e.target.closest('.qps-lab-copy-entry');
+		if (! btn) { return; }
+		var entry = btn.closest('.qps-lab-log-entry');
+		if (! entry) { return; }
+		var pre = entry.querySelector('.qps-lab-log-entry-body');
+		if (! pre) { return; }
+		var text = pre.textContent || '';
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			navigator.clipboard.writeText(text).then(function () {
+				var orig = btn.textContent;
+				btn.textContent = '✓ Copied';
+				setTimeout(function () { btn.textContent = orig; }, 1500);
+			}).catch(function () {
+				fallbackCopy(text, btn);
+			});
+		} else {
+			fallbackCopy(text, btn);
+		}
+	});
+
+	function fallbackCopy(text, btn) {
+		var ta = document.createElement('textarea');
+		ta.value = text;
+		ta.style.position = 'fixed';
+		ta.style.opacity  = '0';
+		document.body.appendChild(ta);
+		ta.focus();
+		ta.select();
+		try { document.execCommand('copy'); } catch (e) {}
+		document.body.removeChild(ta);
+		var orig = btn.textContent;
+		btn.textContent = '✓ Copied';
+		setTimeout(function () { btn.textContent = orig; }, 1500);
+	}
+
 	// ── Debug Console — Download Log ──────────────────────────────────────────
 
 	var downloadBtn = document.getElementById('qps-lab-download');

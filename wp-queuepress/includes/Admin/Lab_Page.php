@@ -480,16 +480,17 @@ final class Lab_Page {
 							<?php foreach ($entries as $entry) : ?>
 							<div class="qps-lab-log-entry">
 								<div class="qps-lab-log-entry-header">
-									<strong class="qps-lab-log-ts"><?php echo esc_html($entry['timestamp'] ?? ''); ?></strong>
-									<?php if (isset($entry['type'])) : ?>
-										<span class="qps-lab-log-type"><?php echo esc_html($entry['type']); ?></span>
-									<?php endif; ?>
-									<?php if (isset($entry['http_status'])) : ?>
-										<span class="qps-lab-log-status qps-lab-log-status--<?php echo (int) $entry['http_status'] === 200 ? 'ok' : 'err'; ?>">
-											HTTP <?php echo esc_html((string) $entry['http_status']); ?>
-										</span>
-									<?php endif; ?>
-								</div>
+								<strong class="qps-lab-log-ts"><?php echo esc_html($entry['timestamp'] ?? ''); ?></strong>
+								<?php if (isset($entry['type'])) : ?>
+								<span class="qps-lab-log-type"><?php echo esc_html($entry['type']); ?></span>
+								<?php endif; ?>
+								<?php if (isset($entry['http_status'])) : ?>
+								<span class="qps-lab-log-status qps-lab-log-status--<?php echo (int) $entry['http_status'] === 200 ? 'ok' : 'err'; ?>">
+								HTTP <?php echo esc_html((string) $entry['http_status']); ?>
+								</span>
+								<?php endif; ?>
+								 <button type="button" class="qps-lab-copy-entry button button-small" aria-label="<?php esc_attr_e('Copy log entry', 'wp-queuepress'); ?>"><?php esc_html_e('Copy', 'wp-queuepress'); ?></button>
+							</div>
 								<pre class="qps-lab-pre qps-lab-log-entry-body"><?php echo esc_html(wp_json_encode($entry, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); ?></pre>
 							</div>
 							<?php endforeach; ?>

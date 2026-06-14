@@ -166,7 +166,11 @@ final class Publisher_Commons {
                         }
                     }
 
-                    if (strpos($name, 'wp:bunny/') === 0 || stripos($name, 'gallery') !== false) {
+                    if (
+                        strpos($name, 'bunny/') === 0 ||
+                        strpos($name, 'core/gallery') === 0 ||
+                        stripos($name, 'gallery') !== false
+                    ) {
                         $attrs = $block['attrs'] ?? array();
                         if (! empty($attrs['imageData']) && is_array($attrs['imageData'])) {
                             foreach ($attrs['imageData'] as $img) {
@@ -237,7 +241,7 @@ final class Publisher_Commons {
                     'type' => 'gallery_extract',
                     'post_id' => $post->ID,
                     'mode' => 'blocks',
-                    'raw_excerpt' => mb_substr($raw_content, 0, 2000),
+                    'raw_excerpt' => mb_substr($raw_content, 0, 5000),
                     'block_count' => count($blocks),
                     'block_names' => array_values(array_unique($diagnostic_block_names)),
                     'found_count' => count($diagnostic_found),

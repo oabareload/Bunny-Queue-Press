@@ -389,10 +389,21 @@ final class Queue_Rebuilder {
                 );
             }
 
+            // Parse new_date as a site-timezone datetime. The value arriving
+            // here is always a local post_date string (no UTC offset marker)
+            // or a DATE_ATOM string from a plan item. Both cases are handled
+            // by creating the DateTimeImmutable in the site timezone explicitly
+            // so PHP never guesses the timezone.
             try {
-                $dt             = new DateTimeImmutable($new_date);
-                $dt             = $dt->setTimezone(wp_timezone());
+                $tz             = wp_timezone();
+                $dt             = new DateTimeImmutable($new_date, $tz);
+                // Normalise to site timezone to get the canonical local string.
+                $dt             = $dt->setTimezone($tz);
                 $new_date_local = $dt->format('Y-m-d H:i:s');
+                // GMT equivalent — built from the same DateTimeImmutable so
+                // no string-parsing ambiguity is introduced.
+                $dt_utc         = $dt->setTimezone(new \DateTimeZone('UTC'));
+                $new_date_gmt   = $dt_utc->format('Y-m-d H:i:s');
             } catch (\Throwable $ex) {
                 $results['conflicts'][] = array('post_id' => $post_id, 'message' => 'Invalid new_date format', 'new_date' => $new_date);
                 continue;
@@ -413,15 +424,18 @@ final class Queue_Rebuilder {
                 continue;
             }
 
-            // Guard: new_date must be strictly in the future. If the date has
-            // already passed (e.g. race condition on a near-term post), WordPress
-            // would silently derive post_status='publish'. Skip instead.
-            $new_date_gmt = get_gmt_from_date($new_date_local);
-            if (strtotime($new_date_gmt) <= time()) {
+            // Guard: new_date must be strictly in the future. Compare two
+            // DateTimeImmutable objects both in UTC so no timezone offset can
+            // skew the result. $dt_utc was built from the same $dt above;
+            // $now_utc is constructed fresh to minimise the window between
+            // plan computation and this write-time check.
+            $now_utc = new DateTimeImmutable('now', new \DateTimeZone('UTC'));
+            if ($dt_utc <= $now_utc) {
                 $results['conflicts'][] = array(
                     'post_id'      => $post_id,
                     'message'      => 'new_date is not in the future — skipped to prevent accidental publication.',
                     'new_date_gmt' => $new_date_gmt,
+                    'now_gmt'      => $now_utc->format('Y-m-d H:i:s'),
                 );
                 continue;
             }

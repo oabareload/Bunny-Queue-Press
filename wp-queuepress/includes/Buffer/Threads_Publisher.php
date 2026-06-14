@@ -159,7 +159,7 @@ final class Threads_Publisher {
             $limit,
             array(
                 'force_source'      => 'excerpt',
-                'include_permalink' => false,
+                'include_permalink' => true,
                 'post_style'        => 'card_link',
             )
         );

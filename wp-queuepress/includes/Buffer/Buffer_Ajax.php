@@ -88,6 +88,9 @@ final class Buffer_Ajax {
 		add_action('wp_ajax_qps_send_to_buffer',         array($this, 'handle_send_to_buffer'));
 		add_action('wp_ajax_qps_send_to_buffer_service', array($this, 'handle_send_to_buffer_service'));
 		add_action('wp_ajax_qps_delete_buffer_posts',    array($this, 'handle_delete_buffer_posts'));
+		// Auto-publish to social when a scheduled post goes live, but only if
+		// there has never been any prior social publication attempt for this post.
+		add_action('transition_post_status', array($this, 'handle_future_to_publish'), 10, 3);
 	}
 
 	// -------------------------------------------------------------------------
@@ -275,6 +278,49 @@ final class Buffer_Ajax {
 			'results' => $results,
 			'message' => $message,
 		));
+	}
+
+	// -------------------------------------------------------------------------
+	// Auto-publish on future → publish transition
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Fires when any post changes status. When a post transitions from 'future'
+	 * to 'publish' (i.e. WordPress publishes a scheduled post automatically),
+	 * we trigger a full Buffer publish — but ONLY if no prior social publication
+	 * attempt has ever been recorded for this post.
+	 *
+	 * The guard is intentionally all-or-nothing: if the meta key exists with
+	 * any entries (successful or failed), we do nothing. This prevents duplicate
+	 * or partial retries when Buffer returns an error but still publishes.
+	 *
+	 * @param string   $new_status New post status.
+	 * @param string   $old_status Previous post status.
+	 * @param \WP_Post $post       The post object.
+	 * @return void
+	 */
+	public function handle_future_to_publish(string $new_status, string $old_status, \WP_Post $post): void {
+		// Only act on the exact future → publish transition.
+		if ($old_status !== 'future' || $new_status !== 'publish') {
+			return;
+		}
+
+		// Skip autosaves and revisions.
+		if (wp_is_post_autosave($post->ID) || wp_is_post_revision($post->ID)) {
+			return;
+		}
+
+		// Guard: if any prior social publication attempt exists for this post,
+		// do not re-publish. The meta key is set by save_channel_record() on
+		// every attempt that returned a usable Buffer post_id. We use get_post_meta
+		// directly to check for ANY non-empty value without loading the full record.
+		$existing = get_post_meta($post->ID, self::META_KEY, true);
+		if (! empty($existing)) {
+			return;
+		}
+
+		// No prior attempt — run the full publish to all enabled services.
+		$this->publish_to_services($post->ID, array_keys(Platform_Registry::all()));
 	}
 
 	// -------------------------------------------------------------------------
