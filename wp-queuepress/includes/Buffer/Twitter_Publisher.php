@@ -222,8 +222,6 @@ final class Twitter_Publisher {
         $thread_texts = array_merge(array($intro), $body_chunks);
 
         // 4. Guardia final: re-split any element that still exceeds the limit.
-        //    This covers edge cases where upstream logic produces an oversized
-        //    element (e.g. a very long title with no natural break point).
         $validated = array();
         foreach ($thread_texts as $element) {
             if (mb_strlen($element, 'UTF-8') <= $effective_limit) {
@@ -236,41 +234,86 @@ final class Twitter_Publisher {
         }
         $thread_texts = $validated;
 
-        // 4. Gather images for the thread. Twitter does NOT restrict on NSFW.
+        // 5. Gather images for the thread. Twitter does NOT restrict on NSFW.
         $max_images_entry = $service_limits['max_images'] ?? array('value' => 4);
         $max_thread_posts_entry = $service_limits['max_thread_posts'] ?? array('value' => 25);
         $max_images_value = is_array($max_images_entry) && isset($max_images_entry['value']) ? (int) $max_images_entry['value'] : (int) $max_images_entry;
         $max_thread_posts_value = is_array($max_thread_posts_entry) && isset($max_thread_posts_entry['value']) ? (int) $max_thread_posts_entry['value'] : (int) $max_thread_posts_entry;
         $max_total_images = max(1, $max_images_value * $max_thread_posts_value);
         $images = Publisher_Commons::build_assets($post, $cfg, $is_nsfw, $max_total_images, true);
+        $thread_truncated = false;
+        $featured = get_the_post_thumbnail_url($post->ID, 'full');
+
+        // 6. Top-level assets = featured image (consistent with prior behavior).
+        $top_assets = array();
+        if (! empty($featured)) { $top_assets[] = $featured; }
 
         $max_per_element = isset($service_limits['images_per_element'])
             ? (int) $service_limits['images_per_element']
             : (isset($service_limits['images_per_post']) ? (int) $service_limits['images_per_post'] : 4);
 
-        // 5. Distribute images across thread elements.
-        $distributed = Publisher_Commons::distribute_images_across_chunks($images, count($thread_texts), $max_per_element);
+        // 7. Si el hilo excede el límite de Buffer,
+        // reemplazar el último elemento por un mensaje de continuación.
+        if (count($thread_texts) > $max_thread_posts_value) {
 
-        // 6. Build the thread payload.
-        $thread_payload = array();
-        foreach ($thread_texts as $i => $text) {
-            $assets_for_element = array();
-            foreach ($distributed[$i] ?? array() as $url) {
-                $assets_for_element[] = array('image' => array('url' => $url));
-            }
-            $thread_payload[] = array('text' => $text, 'assets' => $assets_for_element);
+            $thread_truncated = true;
+
+            // Conservamos un espacio para el mensaje final.
+            $thread_texts = array_slice(
+                $thread_texts,
+                0,
+                $max_thread_posts_value - 1
+            );
+
+            $thread_texts[] = sprintf(
+                "🐰✨ Llegamos al límite del hilo.\n\nPuedes leer el resto del artículo aquí:\n%s",
+                get_permalink($post)
+            );
         }
 
-        // 7. Top-level text is the intro (per the rule: caption = first element of the thread).
+        // 8. Distribute images across thread elements.
+        $distributed = Publisher_Commons::distribute_images_across_chunks($images, count($thread_texts), $max_per_element);
+
+        // 9. Build the thread payload.
+        $thread_payload = array();
+        foreach ($thread_texts as $i => $text) {
+            
+            $assets_for_element = array();
+
+            // Si es el último tweet del hilo truncado,
+            // ignoramos la distribución normal y usamos la imagen destacada.
+            if (
+                $thread_truncated &&
+                $i === count($thread_texts) - 1 &&
+                ! empty($featured)
+            ) {
+                $assets_for_element[] = array(
+                    'image' => array(
+                        'url' => $featured,
+                    ),
+                );
+            } else {
+
+                foreach ($distributed[$i] ?? array() as $url) {
+                    $assets_for_element[] = array(
+                        'image' => array(
+                            'url' => $url,
+                        ),
+                    );
+                }
+            }
+
+            $thread_payload[] = array(
+                'text'   => $text,
+                'assets' => $assets_for_element,
+            );
+        }
+
+        // 10. Top-level text is the intro (per the rule: caption = first element of the thread).
         $meta = array(
             'detected_post_style' => 'social_post',
             'thread'              => $thread_payload,
         );
-
-        // 8. Top-level assets = featured image (consistent with prior behavior).
-        $top_assets = array();
-        $featured = get_the_post_thumbnail_url($post->ID, 'full');
-        if (! empty($featured)) { $top_assets[] = $featured; }
 
         return Mutation_Commons::build_create_post_mutation($channel_id, $intro, $top_assets, $meta, 'twitter');
     }

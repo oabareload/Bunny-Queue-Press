@@ -241,6 +241,10 @@ final class Platform_Registry {
 						'label' => __('Maximum images', self::TEXT_DOMAIN),
 						'value' => 20,
 					),
+					'max_thread_posts'        => array(
+						'label' => __('Maximum thread posts', self::TEXT_DOMAIN),
+						'value' => 25,
+					),
 					'character_limit' => array(
 						'label' => __('Maximum characters', self::TEXT_DOMAIN),
 						'value' => 500,
