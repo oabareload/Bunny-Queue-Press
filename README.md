@@ -232,6 +232,15 @@ On subsequent requests the guard condition (`$current >= CURRENT_SCHEMA_VERSION`
 
 ## Changelog
 
+### 2.6.6
+
+**Added**
+- Added an optional Buffer Queue flow in Lab for deferred Buffer publishing with enable/disable controls and configurable worker intervals.
+- Added an admin worker status block showing Buffer Queue enabled state, worker scheduled state, interval, last run, and next run.
+- Added a Buffer Queue Jobs list in Lab with job status, retry, cancel, and created-at timestamps.
+- Added a dedicated queue database table and background worker (`qps_buffer_queue_worker`) to process one FIFO job per cron execution.
+- Added timezone-correct presentation for queue timestamps, converting UTC-stored `created_at`, last run, and next run values into the WordPress configured timezone.
+
 ### 2.4.2
 
 **Fixed**
@@ -605,6 +614,7 @@ If a job is found in `processing` status at the start of a worker execution (fro
 - Single global WP-Cron hook: `qps_buffer_queue_worker`
 - Configurable interval from Lab: 5, 10, 15, 30, or 60 minutes
 - Disabled by default; no cron event is scheduled until the queue is enabled
+- `Last run`, `Next run`, and job `Created` timestamps are rendered using the WordPress-configured timezone.
 
 ### Database
 
