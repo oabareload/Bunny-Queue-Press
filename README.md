@@ -37,6 +37,7 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 - Move Down moves a scheduled post one position lower by swapping dates with the next post
 - Drag & Drop on the Future column performs a date swap between the dragged card and the drop target
 - No index rebuilding or multi-post shifting during reorder operations
+- Buffer Queue for resilient background publishing with automatic retry on image errors
 
 ## Workflow
 
@@ -565,11 +566,49 @@ Bunny-Queue-Press/
 - Translation files are prepared in `languages/`.
 - All user-facing strings use the `wp-queuepress` text domain.
 
-## Notes
+---
 
-- No background workers, cron jobs, or batch processors are used. All queue operations are synchronous and triggered by the user's explicit save action in Gutenberg.
-- The Add First rebuild is compute-only at preview time; changes are only written to the database after the user confirms in the modal.
-- Internal prefixes, namespaces, text domains, and database keys remain unchanged from prior releases.
-- Buffer integration uses Bearer Token authentication only. OAuth flows are not supported.
-- The GraphQL mutation format used for Buffer publishing (`addToQueue`, `automatic`, `type: post`, `shouldShareToFeed: true`) must not be altered — it is validated against existing n8n workflow expectations.
-- NSFW content rules (featured-only for Instagram NSFW, forced card_link for Threads NSFW) are enforced by publishers and are not exposed as user-configurable options.
+## Buffer Queue
+
+Since 2.6.0, QueuePress includes an optional Buffer Queue that defers Buffer publications to a background WP-Cron worker. The queue is disabled by default and can be enabled from **Lab > Buffer Queue**.
+
+### How it works
+
+- **Queue OFF** (default): Publishing is synchronous. The pipeline calls the publisher directly and sends to Buffer immediately.
+- **Queue ON**: The pipeline creates a `pending` job in the database and returns immediately. A global WP-Cron worker processes exactly one job per execution.
+
+### FIFO processing
+
+The worker always selects the first eligible `pending` job by ascending ID (`ORDER BY id ASC LIMIT 1`). There are no priority levels or timestamp-based ordering.
+
+### Automatic retry
+
+When Buffer returns the exact error `"Image could not be read from its URL."`, the worker deletes the current job and reinserts it as a new `pending` record at the end of the queue, preserving `post_id`, `network`, `channel_id`, `attempts`, and `last_error`. There is no maximum retry limit.
+
+Any other error marks the job as `failed` without automatic retry.
+
+### Pipeline blocking
+
+While a job exists in `pending`, `processing`, or `failed` status for a given `post_id + network` combination, the pipeline blocks creating a duplicate job. The administrator must use **Retry now** or **Cancel** from Lab before re-sending.
+
+### Manual actions (Lab)
+
+- **Retry now**: Available only for `failed` jobs. Processes the job immediately during the AJAX request using the same publisher flow as the worker.
+- **Cancel / Remove**: Available for all statuses except `processing`. Removes the job and releases the pipeline block.
+
+### Abandoned jobs
+
+If a job is found in `processing` status at the start of a worker execution (from a previous crash), it is marked as `failed`.
+
+### Worker configuration
+
+- Single global WP-Cron hook: `qps_buffer_queue_worker`
+- Configurable interval from Lab: 5, 10, 15, 30, or 60 minutes
+- Disabled by default; no cron event is scheduled until the queue is enabled
+
+### Database
+
+- Table: `{$wpdb->prefix}qps_buffer_queue`
+- Created automatically via `dbDelta()` on first admin load
+- Non-destructive: existing data is never dropped during updates
+

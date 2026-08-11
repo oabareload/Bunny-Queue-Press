@@ -252,6 +252,32 @@ final class Platform_Registry {
 				),
 			),
 
+			'facebook' => array(
+				'label'           => __('Facebook', self::TEXT_DOMAIN),
+				'icon_svg' => '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+					. '<path fill="currentColor" d="M13.5 22v-8h2.7l.4-3h-3.1V9.1c0-.9.3-1.5 1.6-1.5H17V4.9c-.3 0-1.2-.1-2.3-.1-2.3 0-3.9 1.4-3.9 4V11H8v3h2.8v8z"/>'
+					. '</svg>',
+				'publisher_class' => __NAMESPACE__ . '\\Facebook_Publisher',
+
+				'extra_field_keys'       => array('post_style'),
+				'extra_defaults'         => array(
+					'post_style' => 'social_post',
+				),
+				'supported_post_styles'  => array('social_post', 'card_link'),
+				'default_post_style'     => 'social_post',
+
+				'limits' => array(
+					'max_images'      => array(
+						'label' => __('Maximum images', self::TEXT_DOMAIN),
+						'value' => 10,
+					),
+					'character_limit' => array(
+						'label' => __('Maximum characters', self::TEXT_DOMAIN),
+						'value' => 5000,
+					),
+				),
+			),
+
 			'instagram' => array(
 				'label'           => __('Instagram', self::TEXT_DOMAIN),
 				'icon_svg'        => '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'

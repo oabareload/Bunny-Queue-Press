@@ -34,7 +34,7 @@
 	}
 
 	function showFeedback(el, msg, isError) {
-		if (! el) { return; }
+		if (!el) { return; }
 		el.textContent = msg;
 		el.style.color = isError ? '#b32d2e' : '#1e6a1e';
 		setTimeout(function () { el.textContent = ''; }, 4000);
@@ -42,9 +42,9 @@
 
 	// ── Locked state ──────────────────────────────────────────────────────────
 
-	var enableBtn    = document.getElementById('qps-lab-enable-btn');
-	var overlay      = document.getElementById('qps-lab-confirm-overlay');
-	var cancelBtn    = document.getElementById('qps-lab-confirm-cancel');
+	var enableBtn = document.getElementById('qps-lab-enable-btn');
+	var overlay = document.getElementById('qps-lab-confirm-overlay');
+	var cancelBtn = document.getElementById('qps-lab-confirm-cancel');
 	var confirmOkBtn = document.getElementById('qps-lab-confirm-ok');
 
 	if (enableBtn && overlay) {
@@ -114,7 +114,7 @@
 
 	// ── Lab Controls — Debug Logging toggle ───────────────────────────────────
 
-	var debugChk    = document.getElementById('qps-lab-debug-chk');
+	var debugChk = document.getElementById('qps-lab-debug-chk');
 	var debugStatus = document.getElementById('qps-debug-status');
 
 	if (debugChk) {
@@ -130,30 +130,30 @@
 						: qpsLab.i18n.debugDisabled;
 					debugStatus.className = 'qps-lab-control-status ' +
 						(enabled ? 'qps-lab-status--on' : 'qps-lab-status--off');
-				} else if (! json.success) {
+				} else if (!json.success) {
 					// Revert the checkbox on failure.
-					debugChk.checked = ! enabled;
+					debugChk.checked = !enabled;
 				}
 			}).catch(function () {
-				debugChk.checked = ! enabled;
+				debugChk.checked = !enabled;
 			});
 		});
 	}
 
 	// ── GraphQL Playground ────────────────────────────────────────────────────
 
-	var textarea    = document.getElementById('qps-lab-graphql');
-	var executeBtn  = document.getElementById('qps-lab-execute');
-	var logChk      = document.getElementById('qps-lab-log');
-	var playError   = document.getElementById('qps-lab-playground-error');
+	var textarea = document.getElementById('qps-lab-graphql');
+	var executeBtn = document.getElementById('qps-lab-execute');
+	var logChk = document.getElementById('qps-lab-log');
+	var playError = document.getElementById('qps-lab-playground-error');
 
 	var resultsEmpty = document.getElementById('qps-lab-results-empty');
 	var resultsPanel = document.getElementById('qps-lab-results');
-	var reqPre       = document.getElementById('qps-lab-request');
-	var resPre       = document.getElementById('qps-lab-response');
-	var statusEl     = document.getElementById('qps-lab-status');
-	var elapsedEl    = document.getElementById('qps-lab-elapsed');
-	var tsEl         = document.getElementById('qps-lab-ts');
+	var reqPre = document.getElementById('qps-lab-request');
+	var resPre = document.getElementById('qps-lab-response');
+	var statusEl = document.getElementById('qps-lab-status');
+	var elapsedEl = document.getElementById('qps-lab-elapsed');
+	var tsEl = document.getElementById('qps-lab-ts');
 
 	function clearPlayError() {
 		if (playError) { playError.hidden = true; playError.textContent = ''; }
@@ -168,7 +168,7 @@
 	if (executeBtn) {
 		executeBtn.addEventListener('click', function () {
 			var graphql = textarea ? textarea.value.trim() : '';
-			if (! graphql) {
+			if (!graphql) {
 				showPlayError(qpsLab.i18n.emptyInput);
 				return;
 			}
@@ -185,7 +185,7 @@
 				executeBtn.disabled = false;
 				executeBtn.textContent = qpsLab.i18n.execute;
 
-				if (! json.success) {
+				if (!json.success) {
 					showPlayError(json.data && json.data.message ? json.data.message : qpsLab.i18n.unknownError);
 					return;
 				}
@@ -198,10 +198,10 @@
 				if (statusEl) {
 					var ok = d.http_status === 200;
 					statusEl.textContent = 'HTTP ' + (d.http_status !== null ? d.http_status : '\u2014');
-					statusEl.className   = 'qps-lab-meta-item qps-lab-status--' + (ok ? 'ok' : 'err');
+					statusEl.className = 'qps-lab-meta-item qps-lab-status--' + (ok ? 'ok' : 'err');
 				}
 				if (elapsedEl) { elapsedEl.textContent = d.elapsed_ms + ' ms'; }
-				if (tsEl)      { tsEl.textContent = d.timestamp + ' UTC'; }
+				if (tsEl) { tsEl.textContent = d.timestamp + ' UTC'; }
 
 				if (resultsEmpty) { resultsEmpty.hidden = true; }
 				if (resultsPanel) { resultsPanel.hidden = false; }
@@ -222,15 +222,15 @@
 
 	// ── Debug Console — Clear Log ─────────────────────────────────────────────
 
-	var clearBtn       = document.getElementById('qps-lab-clear');
+	var clearBtn = document.getElementById('qps-lab-clear');
 	var consoleFeedback = document.getElementById('qps-lab-console-feedback');
-	var logContainer   = document.getElementById('qps-lab-log');
-	var logDataEl      = document.getElementById('qps-lab-log-data');
+	var logContainer = document.getElementById('qps-lab-log');
+	var logDataEl = document.getElementById('qps-lab-log-data');
 
 	if (clearBtn) {
 		clearBtn.addEventListener('click', function () {
 			var confirmMsg = clearBtn.dataset.confirm || qpsLab.i18n.clearConfirm;
-			if (! window.confirm(confirmMsg)) { return; }
+			if (!window.confirm(confirmMsg)) { return; }
 
 			clearBtn.disabled = true;
 			post('qps_lab_clear_log', { _ajax_nonce: clearBtn.dataset.nonce })
@@ -261,11 +261,11 @@
 
 	document.addEventListener('click', function (e) {
 		var btn = e.target.closest('.qps-lab-copy-entry');
-		if (! btn) { return; }
+		if (!btn) { return; }
 		var entry = btn.closest('.qps-lab-log-entry');
-		if (! entry) { return; }
+		if (!entry) { return; }
 		var pre = entry.querySelector('.qps-lab-log-entry-body');
-		if (! pre) { return; }
+		if (!pre) { return; }
 		var text = pre.textContent || '';
 		if (navigator.clipboard && navigator.clipboard.writeText) {
 			navigator.clipboard.writeText(text).then(function () {
@@ -284,11 +284,11 @@
 		var ta = document.createElement('textarea');
 		ta.value = text;
 		ta.style.position = 'fixed';
-		ta.style.opacity  = '0';
+		ta.style.opacity = '0';
 		document.body.appendChild(ta);
 		ta.focus();
 		ta.select();
-		try { document.execCommand('copy'); } catch (e) {}
+		try { document.execCommand('copy'); } catch (e) { }
 		document.body.removeChild(ta);
 		var orig = btn.textContent;
 		btn.textContent = '✓ Copied';
@@ -306,9 +306,9 @@
 				try { data = JSON.parse(logDataEl.textContent); } catch (e) { data = []; }
 			}
 			var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-			var url  = URL.createObjectURL(blob);
-			var a    = document.createElement('a');
-			a.href     = url;
+			var url = URL.createObjectURL(blob);
+			var a = document.createElement('a');
+			a.href = url;
 			a.download = 'queuepress-debug.log';
 			document.body.appendChild(a);
 			a.click();
@@ -316,5 +316,102 @@
 			URL.revokeObjectURL(url);
 		});
 	}
+
+	// ── Buffer Queue Settings ────────────────────────────────────────────────
+
+	var queueChk = document.getElementById('qps-lab-queue-chk');
+	var queueInterval = document.getElementById('qps-lab-queue-interval');
+	var queueStatus = document.getElementById('qps-queue-status');
+
+	function saveQueueSettings() {
+		if (!queueChk) return;
+		var enabled = queueChk.checked;
+		var interval = queueInterval ? queueInterval.value : 15;
+
+		post('qps_lab_save_queue_settings', {
+			_ajax_nonce: queueChk.dataset.nonce,
+			enabled: enabled ? '1' : '0',
+			interval: interval
+		}).then(function (json) {
+			if (json.success && queueStatus) {
+				// Use server-returned values when available to reflect the true saved state.
+				var srvEnabled = json.data && typeof json.data.enabled !== 'undefined' ? !!json.data.enabled : enabled;
+				var srvInterval = json.data && typeof json.data.interval !== 'undefined' ? String(json.data.interval) : String(interval);
+				queueChk.checked = srvEnabled;
+				if (queueInterval) { queueInterval.value = srvInterval; }
+				queueStatus.textContent = srvEnabled ? 'Enabled' : 'Disabled';
+				queueStatus.className = 'qps-lab-control-status ' + (srvEnabled ? 'qps-lab-status--on' : 'qps-lab-status--off');
+			}
+		}).catch(function () {
+			alert('Network error saving queue settings.');
+		});
+	}
+
+	if (queueChk) {
+		queueChk.addEventListener('change', saveQueueSettings);
+	}
+	if (queueInterval) {
+		queueInterval.addEventListener('change', saveQueueSettings);
+	}
+
+	// ── Buffer Queue Actions ────────────────────────────────────────────────
+
+	document.addEventListener('click', function (e) {
+		var retryBtn = e.target.closest('.qps-lab-queue-retry');
+		var cancelBtn = e.target.closest('.qps-lab-queue-cancel');
+
+		if (retryBtn) {
+			var jobId = retryBtn.dataset.id;
+			var nonce = retryBtn.dataset.nonce;
+			retryBtn.disabled = true;
+			retryBtn.textContent = 'Retrying...';
+
+			post('qps_lab_queue_retry', {
+				_ajax_nonce: nonce,
+				job_id: jobId
+			}).then(function (json) {
+				if (json.success) {
+					window.location.reload();
+				} else {
+					retryBtn.disabled = false;
+					retryBtn.textContent = 'Retry now';
+					alert(json.data && json.data.message ? json.data.message : 'Error retrying job');
+				}
+			}).catch(function () {
+				retryBtn.disabled = false;
+				retryBtn.textContent = 'Retry now';
+				alert('Network error.');
+			});
+		}
+
+		if (cancelBtn) {
+			var cancelJobId = cancelBtn.dataset.id;
+			var cancelNonce = cancelBtn.dataset.nonce;
+			cancelBtn.disabled = true;
+
+			post('qps_lab_queue_cancel', {
+				_ajax_nonce: cancelNonce,
+				job_id: cancelJobId
+			}).then(function (json) {
+				if (json.success) {
+					var row = document.getElementById('qps-job-' + cancelJobId);
+					if (row) {
+						var statusSpan = row.querySelector('.qps-job-status');
+						if (statusSpan) {
+							statusSpan.textContent = 'Cancelled';
+							statusSpan.className = 'qps-job-status qps-job-status--cancelled';
+						}
+						cancelBtn.remove();
+					}
+				} else {
+					cancelBtn.disabled = false;
+					alert(json.data && json.data.message ? json.data.message : 'Error cancelling job');
+				}
+			}).catch(function () {
+				cancelBtn.disabled = false;
+				alert('Network error.');
+			});
+		}
+	});
 
 }());

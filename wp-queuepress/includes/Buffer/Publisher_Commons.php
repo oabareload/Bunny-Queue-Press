@@ -692,4 +692,40 @@ final class Publisher_Commons {
 
         return $result;
     }
+
+	/**
+	 * Saves or overwrites the Buffer publication record for a single channel.
+	 *
+	 * Reads the existing _queuepress_buffer_channels array, updates only the
+	 * entry for the channel used in this publication, and writes it back.
+	 * All other channel entries remain untouched.
+	 *
+	 * @param int                  $post_id WordPress post ID.
+	 * @param array<string, mixed> $result  Normalized result from the publisher.
+	 * @return void
+	 */
+	public static function save_channel_record(int $post_id, array $result): void {
+		$channel_id = (string) ($result['channel_id'] ?? '');
+		if (empty($channel_id)) {
+			return;
+		}
+
+		// The meta key is identical to Buffer_Ajax::META_KEY
+		$meta_key = '_queuepress_buffer_channels';
+		$channels = get_post_meta($post_id, $meta_key, true);
+		if (! is_array($channels)) {
+			$channels = array();
+		}
+
+		// Keyed by channel_id — the primary key. Do not key by service.
+		$channels[$channel_id] = array(
+			'provider' => 'buffer',
+			'service'  => (string) ($result['service'] ?? 'buffer'),
+			'post_id'  => (string) ($result['post_id'] ?? ''),
+			'status'   => (string) ($result['status'] ?? ''),
+			'sent_at'  => gmdate('Y-m-d H:i:s'),
+		);
+
+		update_post_meta($post_id, $meta_key, $channels);
+	}
 }

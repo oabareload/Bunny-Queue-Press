@@ -212,6 +212,31 @@ final class Mutation_Commons {
             }
 
             $metadata_inner = "threads: { {$type_part} {$thread_gql}{$link_part} }";
+        } elseif ('facebook' === $svc) {
+
+            $link_url = '';
+
+            foreach ($assets as $a) {
+                if (
+                    is_array($a)
+                    && isset($a['link'])
+                    && is_array($a['link'])
+                    && ! empty($a['link']['url'])
+                ) {
+                    $link_url = esc_url_raw($a['link']['url']);
+                    break;
+                }
+            }
+
+            $type_part = 'type: post';
+            $link_part = '';
+
+            if (! empty($link_url)) {
+                $link_json = wp_json_encode($link_url);
+                $link_part = " linkAttachment: { url: {$link_json} }";
+            }
+
+            $metadata_inner = "facebook: { {$type_part} {$link_part} }";
         } else {
             // Default to instagram metadata for backward compatibility.
             $metadata_inner = "instagram: { type: post shouldShareToFeed: true }";
@@ -255,7 +280,7 @@ GQL;
         $service = strtolower((string) ($channel_info['service'] ?? ''));
         $post_style = (string) ($cfg['post_style'] ?? '');
 
-        if (! in_array($service, array('twitter', 'threads'), true)) {
+        if (! in_array($service, array('twitter', 'threads', 'facebook'), true)) {
             return null;
         }
 

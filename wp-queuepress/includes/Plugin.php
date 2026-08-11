@@ -26,6 +26,8 @@ use QueuePostScheduler\Schedule\Queue_Rebuilder;
 use QueuePostScheduler\Schedule\Schedule_Calculator;
 use QueuePostScheduler\Schedule\Slot_Repository;
 use QueuePostScheduler\Settings\Preferences;
+use QueuePostScheduler\Buffer\Buffer_Queue_DB;
+use QueuePostScheduler\Buffer\Buffer_Worker;
 
 if (! defined('ABSPATH')) {
 	exit;
@@ -66,6 +68,7 @@ final class Plugin {
 	public function register(): void {
 		$this->load_textdomain();
 		add_action('init', array($this, 'register_queue_meta'));
+		add_filter('cron_schedules', array($this, 'add_cron_schedules'));
 
 		$slot_repository     = new Slot_Repository();
 		$preferences         = new Preferences();
@@ -80,6 +83,7 @@ final class Plugin {
 		$buffer_page   = new Buffer_Page();
 		$lab_page      = new Lab_Page();
 		$buffer_ajax   = new Buffer_Ajax();
+		$buffer_worker = new Buffer_Worker();
 		$admin_menu    = new Admin_Menu($settings_page, $calendar_page, $pipeline_page, $buffer_page, $lab_page);
 		$slot_ajax     = new Slot_Ajax($slot_repository, $post_query, $schedule_calculator, $preferences);
 		$editor_assets = new Editor_Assets();
@@ -88,12 +92,21 @@ final class Plugin {
 
 		// Run once-per-upgrade schema migrations.
 		( new \QueuePostScheduler\Buffer\Channel_Config() )->migrate_legacy_config();
+		
+		add_action('admin_init', static function (): void {
+			$db_version = get_option('qps_buffer_queue_db_version', '0');
+			if ($db_version !== '1.0') {
+				Buffer_Queue_DB::create_table();
+				update_option('qps_buffer_queue_db_version', '1.0');
+			}
+		});
 
 		$settings_page->register();
 		$calendar_page->register();
 		$buffer_page->register();
 		$lab_page->register();
 		$buffer_ajax->register();
+		$buffer_worker->register();
 		$admin_menu->register();
 		$slot_ajax->register();
 		$editor_assets->register();
@@ -121,6 +134,23 @@ final class Plugin {
 				},
 			)
 		);
+	}
+
+	/**
+	 * Adds custom cron schedules for the Buffer Worker.
+	 *
+	 * @param array $schedules
+	 * @return array
+	 */
+	public function add_cron_schedules(array $schedules): array {
+		$intervals = array(5, 10, 15, 30, 60);
+		foreach ($intervals as $mins) {
+			$schedules["qps_{$mins}min"] = array(
+				'interval' => $mins * MINUTE_IN_SECONDS,
+				'display'  => sprintf(esc_html__('Every %d minutes (QueuePress)', 'wp-queuepress'), $mins),
+			);
+		}
+		return $schedules;
 	}
 
 	/**

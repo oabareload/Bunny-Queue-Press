@@ -353,6 +353,12 @@ final class Buffer_Ajax {
 		$allowed      = array_flip(array_map('strval', $service_slugs));
 		$results      = array();
 
+		// Check if queue is enabled
+		$lab_settings = get_option('qps_lab_queue_settings', array());
+		$queue_enabled = ! empty($lab_settings['enabled']);
+		
+		$db = $queue_enabled ? new Buffer_Queue_DB() : null;
+
 		foreach ($all_channels as $channel_id => $channel_cfg) {
 			if (! is_array($channel_cfg)) { continue; }
 			if (($channel_cfg['provider'] ?? '') !== 'buffer') { continue; }
@@ -372,17 +378,50 @@ final class Buffer_Ajax {
 				continue;
 			}
 
-			/** @var object $publisher */
-			$publisher = new $publisher_class($client, $config);
-			$res = $publisher->publish_to_channel($post_id, (string) $channel_id);
+			if ($queue_enabled && $db) {
+				// Check for active job
+				$active_jobs = $db->get_active_jobs($post_id, $service);
+				if (! empty($active_jobs)) {
+					$results[(string) $channel_id] = array(
+						'success'    => false,
+						'message'    => __('Already in queue.', 'wp-queuepress'),
+						'channel_id' => (string) $channel_id,
+						'service'    => $service,
+					);
+					continue;
+				}
+				
+				// Enqueue job
+				$job_id = $db->add_job($post_id, $service, (string) $channel_id);
+				if ($job_id) {
+					$results[(string) $channel_id] = array(
+						'success'    => true,
+						'message'    => __('Queued', 'wp-queuepress'), // Using this to display OK/Queued in UI
+						'channel_id' => (string) $channel_id,
+						'service'    => $service,
+						'queued'     => true,
+					);
+				} else {
+					$results[(string) $channel_id] = array(
+						'success'    => false,
+						'message'    => __('Failed to enqueue.', 'wp-queuepress'),
+						'channel_id' => (string) $channel_id,
+						'service'    => $service,
+					);
+				}
+			} else {
+				// Synchronous publish (Queue OFF)
+				/** @var object $publisher */
+				$publisher = new $publisher_class($client, $config);
+				$res = $publisher->publish_to_channel($post_id, (string) $channel_id);
 
-			// Persist only when Buffer returned a usable post_id, so we never
-			// overwrite a previous successful record with a failed attempt.
-			if (isset($res['channel_id']) && ! empty($res['channel_id']) && ! empty($res['post_id'])) {
-				$this->save_channel_record($post_id, $res);
+				// Persist only when Buffer returned a usable post_id
+				if (isset($res['channel_id']) && ! empty($res['channel_id']) && ! empty($res['post_id'])) {
+					Publisher_Commons::save_channel_record($post_id, $res);
+				}
+
+				$results[(string) $channel_id] = $res;
 			}
-
-			$results[(string) $channel_id] = $res;
 		}
 
 		return $results;
@@ -434,41 +473,4 @@ final class Buffer_Ajax {
 		return $post->post_status;
 	}
 
-	// -------------------------------------------------------------------------
-	// Persistence
-	// -------------------------------------------------------------------------
-
-	/**
-	 * Saves or overwrites the Buffer publication record for a single channel.
-	 *
-	 * Reads the existing _queuepress_buffer_channels array, updates only the
-	 * entry for the channel used in this publication, and writes it back.
-	 * All other channel entries remain untouched.
-	 *
-	 * @param int                  $post_id WordPress post ID.
-	 * @param array<string, mixed> $result  Normalized result from the publisher.
-	 * @return void
-	 */
-	private function save_channel_record(int $post_id, array $result): void {
-		$channel_id = (string) ($result['channel_id'] ?? '');
-		if (empty($channel_id)) {
-			return;
-		}
-
-		$channels = get_post_meta($post_id, self::META_KEY, true);
-		if (! is_array($channels)) {
-			$channels = array();
-		}
-
-		// Keyed by channel_id — the primary key. Do not key by service.
-		$channels[$channel_id] = array(
-			'provider' => 'buffer',
-			'service'  => (string) ($result['service'] ?? 'buffer'),
-			'post_id'  => (string) ($result['post_id'] ?? ''),
-			'status'   => (string) ($result['status'] ?? ''),
-			'sent_at'  => gmdate('Y-m-d H:i:s'),
-		);
-
-		update_post_meta($post_id, self::META_KEY, $channels);
-	}
 }

@@ -62,7 +62,7 @@ final class Pipeline_Page {
 	 * Mirror of Buffer_Ajax::PUBLISHABLE_STATUSES, kept here so the UI
 	 * can disable the action without an extra round-trip.
 	 */
-	private const PUBLISHABLE_STATUSES = array('publish', 'future');
+	private const PUBLISHABLE_STATUSES = array('publish');
 
 	/**
 	 * Builds the pipeline page controller.
@@ -467,11 +467,11 @@ final class Pipeline_Page {
 							<?php
 							// Render one icon per registered platform, in registry order.
 							foreach (Platform_Registry::all() as $slug => $def) :
-								$entry          = isset($by_service[$slug]) ? $by_service[$slug] : null;
-								$state_modifier = 'qps-platform--idle';
-								$state_label    = __('Not sent', 'wp-queuepress');
-								$tooltip_date   = '';
-								$has_record     = false;
+								$entry          	= isset($by_service[$slug]) ? $by_service[$slug] : null;
+								$state_modifier 	= 'qps-platform--idle';
+								$state_label    	= __('Not sent', 'wp-queuepress');
+								$tooltip_date   	= '';
+								$has_record     	= false;
 								if (is_array($entry) && $has_real_record($entry)) {
 									$has_record     = true;
 									$resolved       = $this->resolve_platform_state($entry);
@@ -479,18 +479,22 @@ final class Pipeline_Page {
 									$state_label    = $resolved['label'];
 									$tooltip_date   = $resolved['date'];
 								}
-								$platform_label = Platform_Registry::label($slug);
-								$tooltip        = $platform_label . "\n" . $state_label;
+								$platform_label 	= Platform_Registry::label($slug);
+								$tooltip        	= $platform_label . "\n" . $state_label;
 								if ($tooltip_date !== '') {
 									$tooltip .= "\n" . $tooltip_date;
 								}
 								// Clickable whenever this platform has at least one enabled channel,
 								// regardless of whether a Buffer record was previously saved.
 								// Label adapts: "Send to X" (no record) vs "Re-send to X" (record exists).
-								$has_channel    = isset($active_slugs[$slug]);
-								$clickable_class = $has_channel ? ' qps-platform--clickable' : '';
-								$tag            = $has_channel ? 'button' : 'span';
-								$action_label   = $has_record
+								$has_channel    	= isset($active_slugs[$slug]);
+								$clickable_class 	= ($has_channel && $is_publishable)
+									? ' qps-platform--clickable'
+									: '';
+								$tag 				= ($has_channel && $is_publishable)
+									? 'button'
+									: 'span';
+								$action_label  		= $has_record
 									? sprintf(
 										/* translators: %s: platform name. */
 										__('Re-send to %s', 'wp-queuepress'),
@@ -501,7 +505,7 @@ final class Pipeline_Page {
 										__('Send to %s', 'wp-queuepress'),
 										$platform_label
 									);
-								$extra_attrs = $has_channel
+								$extra_attrs 		= ($has_channel && $is_publishable)
 									? ' type="button"'
 									  . ' data-post-id="' . esc_attr((string) $post->ID) . '"'
 									  . ' data-service="' . esc_attr($slug) . '"'

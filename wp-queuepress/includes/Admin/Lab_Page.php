@@ -34,6 +34,8 @@ namespace QueuePostScheduler\Admin;
 
 use QueuePostScheduler\Buffer\Buffer_Client;
 use QueuePostScheduler\Buffer\Buffer_Debug;
+use QueuePostScheduler\Buffer\Buffer_Queue_DB;
+use QueuePostScheduler\Buffer\Buffer_Worker;
 
 if (! defined('ABSPATH')) {
 	exit;
@@ -74,6 +76,10 @@ final class Lab_Page {
 	 */
 	private const NONCE_DEBUG = 'qps_lab_save_debug';
 
+	private const NONCE_QUEUE_SETTINGS = 'qps_lab_save_queue_settings';
+	private const NONCE_QUEUE_RETRY = 'qps_lab_queue_retry';
+	private const NONCE_QUEUE_CANCEL = 'qps_lab_queue_cancel';
+
 	// -------------------------------------------------------------------------
 	// Registration
 	// -------------------------------------------------------------------------
@@ -88,6 +94,9 @@ final class Lab_Page {
 		add_action('wp_ajax_qps_lab_clear_log',       array($this, 'handle_clear_log'));
 		add_action('wp_ajax_qps_lab_toggle_mode',     array($this, 'handle_toggle_mode'));
 		add_action('wp_ajax_qps_lab_save_debug',      array($this, 'handle_save_debug'));
+		add_action('wp_ajax_qps_lab_save_queue_settings', array($this, 'handle_save_queue_settings'));
+		add_action('wp_ajax_qps_lab_queue_retry',     array($this, 'handle_queue_retry'));
+		add_action('wp_ajax_qps_lab_queue_cancel',    array($this, 'handle_queue_cancel'));
 	}
 
 	// -------------------------------------------------------------------------
@@ -207,6 +216,101 @@ final class Lab_Page {
 		wp_send_json_success(array('debug' => $debug));
 	}
 
+	public function handle_save_queue_settings(): void {
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied.', 'wp-queuepress')), 403);
+		}
+
+		$nonce = isset($_POST['_ajax_nonce']) ? sanitize_text_field(wp_unslash($_POST['_ajax_nonce'])) : '';
+		if (! wp_verify_nonce($nonce, self::NONCE_QUEUE_SETTINGS)) {
+			wp_send_json_error(array('message' => __('Security check failed.', 'wp-queuepress')), 403);
+		}
+
+		$enabled = isset($_POST['enabled']) && '1' === $_POST['enabled'];
+		$interval = isset($_POST['interval']) ? (int) $_POST['interval'] : 15;
+		if (! in_array($interval, array(5, 10, 15, 30, 60), true)) {
+			$interval = 15;
+		}
+
+		$settings = array('enabled' => $enabled, 'interval' => $interval);
+		update_option('qps_lab_queue_settings', $settings);
+
+		// Handle WP-Cron
+		$hook = Buffer_Worker::CRON_HOOK;
+		if (! $enabled) {
+			wp_clear_scheduled_hook($hook);
+		} else {
+			// Schedule if not scheduled, or if interval changed, we might need to reschedule.
+			// The simplest way to apply interval change is clear and reschedule.
+			wp_clear_scheduled_hook($hook);
+			
+			// We need a custom schedule for WP Cron if it doesn't exist, but let's just use 
+			// an action to add custom schedules if needed, or rely on WP's built-in.
+			// Actually WP doesn't have 5,10,15,30 out of the box except hourly/daily.
+			// So we need to add the schedules in Plugin.php or here.
+			// For this snippet, we'll assume we register a custom schedule dynamically.
+			wp_schedule_event(time(), "qps_{$interval}min", $hook);
+		}
+
+		wp_send_json_success($settings);
+	}
+
+	public function handle_queue_retry(): void {
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied.', 'wp-queuepress')), 403);
+		}
+		
+		$nonce = isset($_POST['_ajax_nonce']) ? sanitize_text_field(wp_unslash($_POST['_ajax_nonce'])) : '';
+		if (! wp_verify_nonce($nonce, self::NONCE_QUEUE_RETRY)) {
+			wp_send_json_error(array('message' => __('Security check failed.', 'wp-queuepress')), 403);
+		}
+		
+		$job_id = isset($_POST['job_id']) ? (int) $_POST['job_id'] : 0;
+		$db = new Buffer_Queue_DB();
+		$job = $db->get_job($job_id);
+		
+		if (! $job) {
+			wp_send_json_error(array('message' => __('Job not found.', 'wp-queuepress')), 404);
+		}
+		
+		if ($job['status'] !== 'failed') {
+			wp_send_json_error(array('message' => __('Only failed jobs can be manually retried.', 'wp-queuepress')), 400);
+		}
+		
+		// Process directly regardless of status, as requested by user.
+		$worker = new Buffer_Worker();
+		$worker->process_single_job($job, $db);
+		
+		$updated_job = $db->get_job($job_id);
+		wp_send_json_success(array('job' => $updated_job));
+	}
+
+	public function handle_queue_cancel(): void {
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied.', 'wp-queuepress')), 403);
+		}
+		
+		$nonce = isset($_POST['_ajax_nonce']) ? sanitize_text_field(wp_unslash($_POST['_ajax_nonce'])) : '';
+		if (! wp_verify_nonce($nonce, self::NONCE_QUEUE_CANCEL)) {
+			wp_send_json_error(array('message' => __('Security check failed.', 'wp-queuepress')), 403);
+		}
+		
+		$job_id = isset($_POST['job_id']) ? (int) $_POST['job_id'] : 0;
+		$db = new Buffer_Queue_DB();
+		$job = $db->get_job($job_id);
+		
+		if (! $job) {
+			wp_send_json_error(array('message' => __('Job not found.', 'wp-queuepress')), 404);
+		}
+		
+		if ($job['status'] === 'processing') {
+			wp_send_json_error(array('message' => __('Processing jobs cannot be cancelled.', 'wp-queuepress')), 400);
+		}
+		
+		$db->update_job($job_id, 'cancelled');
+		wp_send_json_success();
+	}
+
 	// -------------------------------------------------------------------------
 	// Render
 	// -------------------------------------------------------------------------
@@ -226,6 +330,10 @@ final class Lab_Page {
 		$debug_enabled = ! empty($settings['debug_buffer']);
 		$has_token     = '' !== (string) ($settings['access_token'] ?? '');
 		$entries       = $lab_enabled ? Buffer_Debug::get_entries() : array();
+		
+		$db = new Buffer_Queue_DB();
+		$queue_jobs = $db->get_all_jobs();
+		$queue_settings = get_option('qps_lab_queue_settings', array('enabled' => false, 'interval' => 15));
 		?>
 		<div class="wrap bunny-wrap">
 			<?php Admin_Header::render(self::PAGE_SLUG); ?>
@@ -234,7 +342,7 @@ final class Lab_Page {
 				<?php if (! $lab_enabled) : ?>
 					<?php $this->render_locked_state(); ?>
 				<?php else : ?>
-					<?php $this->render_lab($has_token, $debug_enabled, $entries); ?>
+					<?php $this->render_lab($has_token, $debug_enabled, $entries, $queue_settings, $queue_jobs); ?>
 				<?php endif; ?>
 
 			</div><!-- .bunny-page-content -->
@@ -305,12 +413,14 @@ final class Lab_Page {
 	/**
 	 * Renders the full Lab UI (Lab Mode is enabled).
 	 *
-	 * @param bool                          $has_token     Whether a Buffer token is configured.
-	 * @param bool                          $debug_enabled Whether debug logging is currently on.
-	 * @param array<int,array<string,mixed>> $entries       Current debug log entries.
+	 * @param bool                          $has_token      Whether a Buffer token is configured.
+	 * @param bool                          $debug_enabled  Whether debug logging is currently on.
+	 * @param array<int,array<string,mixed>> $entries        Current debug log entries.
+	* @param array<string,mixed>           $queue_settings Queue settings array (enabled, interval).
+	* @param array<int,array<string,mixed>> $queue_jobs     Jobs fetched from the Buffer queue DB.
 	 * @return void
 	 */
-	private function render_lab(bool $has_token, bool $debug_enabled, array $entries): void {
+    private function render_lab(bool $has_token, bool $debug_enabled, array $entries, array $queue_settings, array $queue_jobs): void {
 		?>
 		<div class="qps-lab-grid">
 
@@ -337,6 +447,84 @@ final class Lab_Page {
 						>
 							<?php esc_html_e('Disable Lab Mode', 'wp-queuepress'); ?>
 						</button>
+					</div>
+
+					<hr class="qps-lab-divider" />
+
+					<!-- Buffer Queue toggle -->
+					<div class="qps-lab-control-row">
+						<div class="qps-lab-control-info">
+							<strong><?php esc_html_e('Buffer Queue', 'wp-queuepress'); ?></strong>
+							<span id="qps-queue-status" class="qps-lab-control-status <?php echo ! empty($queue_settings['enabled']) ? 'qps-lab-status--on' : 'qps-lab-status--off'; ?>">
+								<?php echo ! empty($queue_settings['enabled'])
+									? esc_html__('Enabled', 'wp-queuepress')
+									: esc_html__('Disabled', 'wp-queuepress'); ?>
+							</span>
+						</div>
+						<div>
+							<label for="qps-lab-queue-interval"><?php esc_html_e('Worker interval:', 'wp-queuepress'); ?></label>
+							<select id="qps-lab-queue-interval">
+								<?php
+								$intervals = array(5, 10, 15, 30, 60);
+								foreach ($intervals as $val) {
+									$selected = (int) ($queue_settings['interval'] ?? 15) === $val ? 'selected' : '';
+									echo sprintf('<option value="%1$d" %2$s>%1$d min</option>', $val, $selected);
+								}
+								?>
+							</select>
+							<label class="qps-toggle" for="qps-lab-queue-chk" style="margin-left: 10px;">
+								<input
+									type="checkbox"
+									id="qps-lab-queue-chk"
+									value="1"
+									<?php checked(! empty($queue_settings['enabled'])); ?>
+									data-nonce="<?php echo esc_attr(wp_create_nonce(self::NONCE_QUEUE_SETTINGS)); ?>"
+								/>
+								<span class="qps-toggle-track"><span class="qps-toggle-thumb"></span></span>
+								<span class="qps-toggle-label"><?php esc_html_e('Enable Queue', 'wp-queuepress'); ?></span>
+							</label>
+						</div>
+					</div>
+					<p class="description" style="margin-top:6px;">
+						<?php esc_html_e('When enabled, publishing is deferred to a background worker to handle Buffer errors resiliently.', 'wp-queuepress'); ?>
+					</p>
+
+					<!-- Worker status block -->
+					<?php
+					$last_run = get_option('qps_buffer_queue_last_run', '');
+					$next_ts = wp_next_scheduled(Buffer_Worker::CRON_HOOK);
+					$scheduled = $next_ts ? true : false;
+					$cfg_interval = (int) ($queue_settings['interval'] ?? 0);
+
+					// Use WordPress date/time formats and timezone for display only.
+					$date_format = get_option('date_format') . ' ' . get_option('time_format');
+					$last_run_display = '';
+					if ($last_run) {
+						// $last_run is stored as a GMT/UTC MySQL datetime string.
+						// Convert to a Unix timestamp (UTC) and let wp_date() render it
+						// in the site timezone/format to avoid double conversions.
+						$ts = strtotime($last_run . ' UTC');
+						if (false !== $ts) {
+							$last_run_display = wp_date($date_format, $ts);
+						}
+					}
+					$next_run_display = '';
+					if ($next_ts) {
+						// wp_next_scheduled() returns a Unix timestamp; pass it directly to wp_date()
+						// so it is rendered using the site's timezone.
+						$next_run_display = wp_date($date_format, (int) $next_ts);
+					}
+					?>
+					<div class="qps-worker-status" style="margin-top:12px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+						<div class="qps-worker-item"><strong><?php esc_html_e('Buffer Queue:', 'wp-queuepress'); ?></strong>
+							<span class="qps-lab-control-status <?php echo ! empty($queue_settings['enabled']) ? 'qps-lab-status--on' : 'qps-lab-status--off'; ?>">
+								<?php echo ! empty($queue_settings['enabled']) ? esc_html__('Enabled', 'wp-queuepress') : esc_html__('Disabled', 'wp-queuepress'); ?>
+							</span>
+						</div>
+						<div class="qps-worker-item"><strong><?php esc_html_e('Worker:', 'wp-queuepress'); ?></strong> <?php echo $scheduled ? esc_html__('Scheduled', 'wp-queuepress') : esc_html__('Not scheduled', 'wp-queuepress'); ?></div>
+						<div class="qps-worker-item"><strong><?php esc_html_e('Interval:', 'wp-queuepress'); ?></strong> <?php echo $cfg_interval ? esc_html($cfg_interval . ' min') : esc_html__('—', 'wp-queuepress'); ?></div>
+						<div class="qps-worker-item"><strong><?php esc_html_e('Last run:', 'wp-queuepress'); ?></strong> <?php echo $last_run_display ? esc_html($last_run_display) : esc_html__('Never', 'wp-queuepress'); ?></div>
+						<div class="qps-worker-item"><strong><?php esc_html_e('Next run:', 'wp-queuepress'); ?></strong> <?php echo $next_run_display ? esc_html($next_run_display) : esc_html__('—', 'wp-queuepress'); ?></div>
 					</div>
 
 					<hr class="qps-lab-divider" />
@@ -504,6 +692,85 @@ final class Lab_Page {
 
 				</div><!-- .qps-lab-card-body -->
 			</div><!-- Card 4 -->
+
+			<!-- ── Card 5: Buffer Queue Jobs ── -->
+			<div class="qps-lab-card qps-lab-card--queue">
+				<div class="qps-lab-card-header">
+					<h2 class="qps-lab-card-title"><?php esc_html_e('Buffer Queue Jobs', 'wp-queuepress'); ?></h2>
+				</div>
+				<div class="qps-lab-card-body">
+					<?php if (empty($queue_jobs)) : ?>
+						<p><?php esc_html_e('No jobs in the queue.', 'wp-queuepress'); ?></p>
+					<?php else : ?>
+						<div class="qps-queue-table-wrap">
+						<table class="qps-queue-table">
+							<thead>
+								<tr>
+									<th><?php esc_html_e('Post', 'wp-queuepress'); ?></th>
+									<th><?php esc_html_e('Network', 'wp-queuepress'); ?></th>
+									<th><?php esc_html_e('Status', 'wp-queuepress'); ?></th>
+									<th><?php esc_html_e('Created', 'wp-queuepress'); ?></th>
+									<th><?php esc_html_e('Attempts', 'wp-queuepress'); ?></th>
+									<th><?php esc_html_e('Last Error', 'wp-queuepress'); ?></th>
+									<th><?php esc_html_e('Actions', 'wp-queuepress'); ?></th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php foreach ($queue_jobs as $job) : ?>
+									<tr id="qps-job-<?php echo esc_attr((string) $job['id']); ?>">
+										<td class="qps-queue-post">
+											<a href="<?php echo esc_url(get_edit_post_link((int) $job['post_id'])); ?>">
+												<?php echo esc_html((string) $job['post_id']); ?>
+											</a>
+										</td>
+										<td class="qps-queue-network"><?php echo esc_html(ucfirst((string) $job['network'])); ?></td>
+										<td class="qps-queue-status">
+											<span class="qps-job-status qps-job-status--<?php echo esc_attr((string) $job['status']); ?>">
+												<?php echo esc_html(ucfirst((string) $job['status'])); ?>
+											</span>
+										</td>
+										<td class="qps-queue-created">
+											<?php
+											$created_display = '';
+											if (! empty($job['created_at'])) {
+												// stored as UTC MySQL datetime string — convert to timestamp and render
+												$created_ts = strtotime((string) $job['created_at'] . ' UTC');
+												if (false !== $created_ts) {
+													// reuse site date/time format so presentation matches Last/Next run
+													$created_display = wp_date($date_format, $created_ts);
+												}
+											}
+											echo $created_display ? esc_html($created_display) : esc_html('—');
+											?>
+										</td>
+										<td class="qps-queue-attempts"><?php echo esc_html((string) $job['attempts']); ?></td>
+										<td class="qps-queue-error">
+											<?php if (! empty($job['last_error'])) : ?>
+												<div class="qps-job-error-block"><pre class="qps-job-error-pre"><?php echo esc_html((string) $job['last_error']); ?></pre></div>
+											<?php else : ?>
+												—
+											<?php endif; ?>
+										</td>
+										<td class="qps-queue-actions">
+											<?php if (in_array($job['status'], array('pending', 'retry', 'processing', 'failed'), true)) : ?>
+												<button type="button" class="button button-small qps-lab-queue-cancel" data-id="<?php echo esc_attr((string) $job['id']); ?>" data-nonce="<?php echo esc_attr(wp_create_nonce(self::NONCE_QUEUE_CANCEL)); ?>">
+													<?php esc_html_e('Cancel', 'wp-queuepress'); ?>
+												</button>
+											<?php endif; ?>
+											<?php if ($job['status'] === 'failed') : ?>
+												<button type="button" class="button button-small button-primary qps-lab-queue-retry" data-id="<?php echo esc_attr((string) $job['id']); ?>" data-nonce="<?php echo esc_attr(wp_create_nonce(self::NONCE_QUEUE_RETRY)); ?>">
+													<?php esc_html_e('Retry', 'wp-queuepress'); ?>
+												</button>
+											<?php endif; ?>
+										</td>
+									</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+						</div>
+					<?php endif; ?>
+				</div>
+			</div><!-- Card 5 -->
 
 		</div><!-- .qps-lab-grid -->
 		<?php

@@ -251,6 +251,24 @@
 .qps-apply-error-wrap { padding:12px; display:flex; gap:8px; align-items:center; }
 .qps-apply-error { color:#b32d2e; background:#fff0f0; border:1px solid #f3c6c6; padding:8px; border-radius:4px; }
 
+/* Buffer Queue Jobs table styles */
+.qps-queue-table-wrap { overflow-x: auto; margin-top: 12px; }
+.qps-queue-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+.qps-queue-table th, .qps-queue-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
+.qps-queue-table thead th { font-size: 13px; color: #50575e; font-weight: 600; }
+.qps-job-status { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.qps-job-status--pending { background:#eef6f2; color:#1e6a1e; }
+.qps-job-status--processing { background:#eef4ff; color:#2b5bd7; }
+.qps-job-status--failed { background:#fff5f5; color:#b32d2e; }
+.qps-job-status--sent { background:#f0f8ff; color:#0b63a8; }
+.qps-job-error-block { max-width: 320px; }
+.qps-job-error-pre { max-height: 80px; overflow: auto; white-space: pre-wrap; word-wrap: break-word; margin:0; font-size:12px; color:#d63638; }
+.qps-queue-actions .button { margin-right:6px; }
+
+@media (max-width: 720px) {
+	.qps-queue-table { min-width: 640px; }
+}
+
 
 
 .qps-card-link:hover,
@@ -1591,6 +1609,7 @@ button.qps-platform:focus-visible,
 .qps-lab-card--playground { grid-column: 2; grid-row: 1; }
 .qps-lab-card--response   { grid-column: 1 / -1; grid-row: 2; }
 .qps-lab-card--console    { grid-column: 1 / -1; grid-row: 3; }
+.qps-lab-card--queue      { grid-column: 1 / -1; grid-row: 4; }
 
 .qps-lab-card {
 	background: #fff;
@@ -1864,6 +1883,7 @@ button.qps-platform:focus-visible,
 	.qps-lab-card--controls,
 	.qps-lab-card--playground,
 	.qps-lab-card--response,
+	.qps-lab-card--queue,
 	.qps-lab-card--console {
 		grid-column: 1;
 		grid-row: auto;

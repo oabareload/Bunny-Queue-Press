@@ -116,12 +116,10 @@ final class Twitter_Publisher {
 
         $is_nsfw = Publisher_Commons::is_nsfw($post);
 
-        $link_asset = Mutation_Commons::build_link_asset_from_post($post, $cfg, $cfg);
-
         if ($post_style_cfg === 'card_link') {
-            $mutation = $this->build_card_link_mutation($post, $cfg, $channel_id, $limit, $link_asset);
+            $mutation = $this->build_card_link_mutation($post, $cfg, $channel_id, $limit);
         } else {
-            $mutation = $this->build_social_post_mutation($post, $cfg, $channel_id, $limit, $is_nsfw, $service_limits, $link_asset);
+            $mutation = $this->build_social_post_mutation($post, $cfg, $channel_id, $limit, $is_nsfw, $service_limits, null);
         }
 
         $response = $this->client->mutate($mutation);
@@ -137,28 +135,17 @@ final class Twitter_Publisher {
      *
      * @return string
      */
-    private function build_card_link_mutation(WP_Post $post, array $cfg, string $channel_id, int $limit, ?array $link_asset): string {
+    private function build_card_link_mutation(WP_Post $post, array $cfg, string $channel_id, int $limit): string {
         $caption = Publisher_Commons::build_caption(
             $post,
             $cfg,
             $limit,
             array(
                 'force_source'      => 'excerpt',
-                'include_permalink' => false,
+                'include_permalink' => true,
                 'post_style'        => 'card_link',
             )
         );
-
-        if ($link_asset !== null) {
-            $assets = array($link_asset);
-            return Mutation_Commons::build_create_post_mutation(
-                $channel_id,
-                $caption,
-                $assets,
-                array('detected_post_style' => 'card_link'),
-                'twitter'
-            );
-        }
 
         $featured = get_the_post_thumbnail_url($post->ID, 'full');
         $assets = array();
