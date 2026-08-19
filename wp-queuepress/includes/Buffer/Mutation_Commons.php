@@ -27,9 +27,14 @@ final class Mutation_Commons {
      * @param string $channel_id
      * @param string $caption
      * @param string[] $asset_urls
+     * @param string $mode Either 'addToQueue' or 'shareNow'. Any other value falls back to 'addToQueue'.
      * @return string
      */
-    public static function build_create_post_mutation_from_image_urls(string $channel_id, string $caption, array $asset_urls): string {
+    public static function build_create_post_mutation_from_image_urls(string $channel_id, string $caption, array $asset_urls, string $mode = 'addToQueue'): string {
+        if (! in_array($mode, array('addToQueue', 'shareNow'), true)) {
+            $mode = 'addToQueue';
+        }
+
         $channel_json = wp_json_encode($channel_id);
         $caption_json = wp_json_encode($caption);
 
@@ -42,14 +47,14 @@ final class Mutation_Commons {
                 },
                 $asset_urls
             );
-            $assets_gql = "\n    assets: [\n" . implode("\n", $asset_lines) . "\n    ]";
+            $assets_gql = "\n    assets: [\n" . implode(",\n", $asset_lines) . "\n    ]";
         }
 
         return <<<GQL
 		mutation {
 		  createPost(input: {
 		    channelId: {$channel_json}
-		    mode: addToQueue
+		    mode: {$mode}
 		    schedulingType: automatic
 		    text: {$caption_json}
 		    metadata: {
@@ -81,9 +86,14 @@ final class Mutation_Commons {
      * @param string $caption
      * @param array  $assets
      * @param array  $meta Optional debug meta
+     * @param string $mode Either 'addToQueue' or 'shareNow'. Any other value falls back to 'addToQueue'.
      * @return string
      */
-    public static function build_create_post_mutation(string $channel_id, string $caption, array $assets, array $meta = [], string $service = ''): string {
+    public static function build_create_post_mutation(string $channel_id, string $caption, array $assets, array $meta = [], string $service = '', string $mode = 'addToQueue'): string {
+        if (! in_array($mode, array('addToQueue', 'shareNow'), true)) {
+            $mode = 'addToQueue';
+        }
+
         $channel_json = wp_json_encode($channel_id);
         $caption_json = wp_json_encode($caption);
 
@@ -133,7 +143,7 @@ final class Mutation_Commons {
 
         $assets_gql = '';
         if (! empty($asset_lines)) {
-            $assets_gql = "\n    assets: [\n" . implode("\n", $asset_lines) . "\n    ]";
+            $assets_gql = "\n    assets: [\n" . implode(",\n", $asset_lines) . "\n    ]";
         }
 
         // Build metadata block based on service.
@@ -237,6 +247,24 @@ final class Mutation_Commons {
             }
 
             $metadata_inner = "facebook: { {$type_part} {$link_part} }";
+        } elseif ('pinterest' === $svc) {
+            $board_service_id = wp_json_encode(
+                sanitize_text_field((string) ($meta['board_service_id'] ?? ''))
+            );
+
+            $title = wp_json_encode(
+                sanitize_text_field((string) ($meta['title'] ?? ''))
+            );
+
+            $link_url = wp_json_encode(
+                esc_url_raw((string) ($meta['url'] ?? ''))
+            );
+
+            $metadata_inner = "pinterest: {"
+                . " boardServiceId: {$board_service_id}"
+                . " title: {$title}"
+                . " url: {$link_url}"
+                . " }";
         } else {
             // Default to instagram metadata for backward compatibility.
             $metadata_inner = "instagram: { type: post shouldShareToFeed: true }";
@@ -248,7 +276,7 @@ final class Mutation_Commons {
 mutation {
     createPost(input: {
         channelId: {$channel_json}
-        mode: addToQueue
+        mode: {$mode}
         schedulingType: automatic
         text: {$caption_json}
         {$metadata_gql}{$assets_gql}
@@ -345,7 +373,7 @@ GQL;
             'thumbnailUrl' => (string) $thumbnail,
         );
 
-        if (class_exists(Buffer_Debug::class)) {
+        /*if (class_exists(Buffer_Debug::class)) {
             Buffer_Debug::add_entry(array(
                 'type' => 'link_card_build',
                 'post_id' => $post->ID,
@@ -355,7 +383,7 @@ GQL;
                 'final_link_object' => $link_obj,
                 'fallback_sources' => $fallback_sources,
             ));
-        }
+        }*/
 
         return array('link' => $link_obj, 'debug' => array('fallback_sources' => $fallback_sources));
     }

@@ -79,6 +79,7 @@ final class Lab_Page {
 	private const NONCE_QUEUE_SETTINGS = 'qps_lab_save_queue_settings';
 	private const NONCE_QUEUE_RETRY = 'qps_lab_queue_retry';
 	private const NONCE_QUEUE_CANCEL = 'qps_lab_queue_cancel';
+	private const NONCE_QUEUE_SHARE_MODE = 'qps_lab_queue_share_mode';
 
 	// -------------------------------------------------------------------------
 	// Registration
@@ -97,6 +98,7 @@ final class Lab_Page {
 		add_action('wp_ajax_qps_lab_save_queue_settings', array($this, 'handle_save_queue_settings'));
 		add_action('wp_ajax_qps_lab_queue_retry',     array($this, 'handle_queue_retry'));
 		add_action('wp_ajax_qps_lab_queue_cancel',    array($this, 'handle_queue_cancel'));
+		add_action('wp_ajax_qps_lab_queue_share_mode', array($this, 'handle_queue_share_mode'));
 	}
 
 	// -------------------------------------------------------------------------
@@ -309,6 +311,56 @@ final class Lab_Page {
 		
 		$db->update_job($job_id, 'cancelled');
 		wp_send_json_success();
+	}
+
+	/**
+	 * AJAX — updates the per-job share_mode ('addToQueue' or 'shareNow').
+	 *
+	 * Only permitted while the job is still 'pending'; the job status is
+	 * re-read from the database immediately before the update so a status
+	 * change that happened between page load and this request is respected.
+	 *
+	 * POST params:
+	 *   _ajax_nonce  Nonce for qps_lab_queue_share_mode.
+	 *   job_id       Queue job ID.
+	 *   share_mode   'addToQueue' or 'shareNow'.
+	 *
+	 * @return void
+	 */
+	public function handle_queue_share_mode(): void {
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied.', 'wp-queuepress')), 403);
+		}
+
+		$nonce = isset($_POST['_ajax_nonce']) ? sanitize_text_field(wp_unslash($_POST['_ajax_nonce'])) : '';
+		if (! wp_verify_nonce($nonce, self::NONCE_QUEUE_SHARE_MODE)) {
+			wp_send_json_error(array('message' => __('Security check failed.', 'wp-queuepress')), 403);
+		}
+
+		$job_id = isset($_POST['job_id']) ? (int) $_POST['job_id'] : 0;
+		$share_mode = isset($_POST['share_mode']) ? sanitize_text_field(wp_unslash($_POST['share_mode'])) : '';
+
+		if (! in_array($share_mode, array('addToQueue', 'shareNow'), true)) {
+			wp_send_json_error(array('message' => __('Invalid share mode.', 'wp-queuepress')), 400);
+		}
+
+		$db = new Buffer_Queue_DB();
+		$job = $db->get_job($job_id);
+
+		if (! $job) {
+			wp_send_json_error(array('message' => __('Job not found.', 'wp-queuepress')), 404);
+		}
+
+		if ($job['status'] !== 'pending') {
+			wp_send_json_error(array('message' => __('Only pending jobs can have their share mode changed.', 'wp-queuepress')), 400);
+		}
+
+		$updated = $db->update_share_mode($job_id, $share_mode);
+		if (! $updated) {
+			wp_send_json_error(array('message' => __('The job is no longer pending. Please reload.', 'wp-queuepress')), 409);
+		}
+
+		wp_send_json_success(array('job_id' => $job_id, 'share_mode' => $share_mode));
 	}
 
 	// -------------------------------------------------------------------------
@@ -712,6 +764,7 @@ final class Lab_Page {
 									<th><?php esc_html_e('Created', 'wp-queuepress'); ?></th>
 									<th><?php esc_html_e('Attempts', 'wp-queuepress'); ?></th>
 									<th><?php esc_html_e('Last Error', 'wp-queuepress'); ?></th>
+									<th><?php esc_html_e('Share now', 'wp-queuepress'); ?></th>
 									<th><?php esc_html_e('Actions', 'wp-queuepress'); ?></th>
 								</tr>
 							</thead>
@@ -750,6 +803,25 @@ final class Lab_Page {
 											<?php else : ?>
 												—
 											<?php endif; ?>
+										</td>
+										<td class="qps-queue-sharemode">
+											<?php
+											$is_pending = ('pending' === (string) $job['status']);
+											$share_mode = (string) ($job['share_mode'] ?? 'addToQueue');
+											?>
+											<label class="qps-toggle" for="qps-job-sharemode-<?php echo esc_attr((string) $job['id']); ?>" title="<?php esc_attr_e('Share now', 'wp-queuepress'); ?>">
+												<input
+													type="checkbox"
+													id="qps-job-sharemode-<?php echo esc_attr((string) $job['id']); ?>"
+													class="qps-lab-queue-sharemode"
+													value="1"
+													data-id="<?php echo esc_attr((string) $job['id']); ?>"
+													data-nonce="<?php echo esc_attr(wp_create_nonce(self::NONCE_QUEUE_SHARE_MODE)); ?>"
+													<?php checked('shareNow', $share_mode); ?>
+													<?php disabled(! $is_pending); ?>
+												/>
+												<span class="qps-toggle-track"><span class="qps-toggle-thumb"></span></span>
+											</label>
 										</td>
 										<td class="qps-queue-actions">
 											<?php if (in_array($job['status'], array('pending', 'retry', 'processing', 'failed'), true)) : ?>

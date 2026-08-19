@@ -103,7 +103,7 @@ final class Publisher_Commons {
 
         $result = array_slice($unique, 0, $max_images);
 
-        if (class_exists(Buffer_Debug::class)) {
+        /*if (class_exists(Buffer_Debug::class)) {
             Buffer_Debug::add_entry(array(
                 'type' => 'assets_filter',
                 'post_id' => $post->ID,
@@ -115,7 +115,7 @@ final class Publisher_Commons {
                 'found' => array_values($found_urls),
                 'returned' => array_values($result),
             ));
-        }
+        }*/
 
         return $result;
     }
@@ -236,7 +236,7 @@ final class Publisher_Commons {
                 if (! isset($seen[$u])) { $seen[$u] = true; $unique[] = $u; }
             }
 
-            if (class_exists(Buffer_Debug::class)) {
+            /*if (class_exists(Buffer_Debug::class)) {
                 Buffer_Debug::add_entry(array(
                     'type' => 'gallery_extract',
                     'post_id' => $post->ID,
@@ -249,7 +249,7 @@ final class Publisher_Commons {
                     'unique_count' => count($unique),
                     'unique' => $unique,
                 ));
-            }
+            }*/
 
             return $unique;
         }
@@ -262,7 +262,7 @@ final class Publisher_Commons {
                 if ($url) { $urls[] = $url; $found[] = $url; }
             }
 
-            if (class_exists(Buffer_Debug::class)) {
+            /*if (class_exists(Buffer_Debug::class)) {
                 Buffer_Debug::add_entry(array(
                     'type' => 'gallery_extract',
                     'post_id' => $post->ID,
@@ -272,9 +272,9 @@ final class Publisher_Commons {
                     'found_count' => count($found),
                     'found' => $found,
                 ));
-            }
+            }*/
         } else {
-            if (class_exists(Buffer_Debug::class)) {
+            /*if (class_exists(Buffer_Debug::class)) {
                 Buffer_Debug::add_entry(array(
                     'type' => 'gallery_extract',
                     'post_id' => $post->ID,
@@ -283,7 +283,7 @@ final class Publisher_Commons {
                     'found_count' => 0,
                     'found' => array(),
                 ));
-            }
+            }*/
         }
 
         return $urls;

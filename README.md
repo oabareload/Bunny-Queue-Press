@@ -232,6 +232,14 @@ On subsequent requests the guard condition (`$current >= CURRENT_SCHEMA_VERSION`
 
 ## Changelog
 
+### 2.6.10
+
+**Added**
+- Added a per-job **Share now** switch to Buffer Queue Jobs in Lab, letting a `pending` job be marked to publish immediately (`shareNow`) instead of the default `addToQueue` behavior. The choice is saved instantly via AJAX and is scoped to that individual job only — there is no global setting.
+
+**Fixed**
+- Fixed the `qps_buffer_queue_db_version` migration guard not re-running on existing installations, which meant the new `share_mode` column would never be added to an already-created `qps_buffer_queue` table. The guard now targets version `1.1`, forcing exactly one additional `dbDelta()` pass on upgrade. This is non-destructive: no jobs are deleted, the table is not recreated, and existing jobs receive `share_mode = 'addToQueue'` via the column's `DEFAULT`.
+
 ### 2.6.6
 
 **Added**

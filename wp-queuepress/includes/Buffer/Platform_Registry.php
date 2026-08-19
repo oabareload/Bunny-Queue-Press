@@ -278,6 +278,29 @@ final class Platform_Registry {
 				),
 			),
 
+			'pinterest' => array(
+				'label'           => __('Pinterest', self::TEXT_DOMAIN),
+				'icon_svg'        => '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+					. '<path fill="currentColor" d="M12 2C6.48 2 2 6.04 2 11.1c0 3.72 2.08 6.92 5.12 8.44-.07-.64-.13-1.63.03-2.34l1.17-4.95s-.3-.6-.3-1.49c0-1.39.81-2.43 1.82-2.43.86 0 1.27.64 1.27 1.41 0 .86-.55 2.15-.83 3.35-.24 1 .5 1.82 1.49 1.82 1.79 0 3.17-1.89 3.17-4.62 0-2.42-1.74-4.11-4.22-4.11-2.88 0-4.57 2.16-4.57 4.39 0 .87.33 1.8.75 2.31.08.1.09.18.07.29l-.28 1.14c-.05.18-.15.22-.34.13-1.27-.59-2.06-2.45-2.06-3.94 0-3.2 2.32-6.14 6.69-6.14 3.51 0 6.24 2.5 6.24 5.84 0 3.49-2.2 6.3-5.26 6.3-1.03 0-2-.54-2.33-1.18l-.63 2.4c-.23.88-.85 1.98-1.27 2.65.95.29 1.95.45 2.99.45 5.52 0 10-4.04 10-9.1S17.52 2 12 2z"/>'
+					. '</svg>',
+				'publisher_class' => __NAMESPACE__ . '\\Pinterest_Publisher',
+				'extra_field_keys' => array('board_service_id'),
+				'extra_defaults' => array(
+					'board_service_id' => '',
+				),
+
+				'limits' => array(
+					'max_images' => array(
+						'label' => __('Maximum images', self::TEXT_DOMAIN),
+						'value' => 10,
+					),
+					'character_limit' => array(
+						'label' => __('Maximum characters', self::TEXT_DOMAIN),
+						'value' => 500,
+					),
+				),
+			),
+
 			'instagram' => array(
 				'label'           => __('Instagram', self::TEXT_DOMAIN),
 				'icon_svg'        => '<svg class="qps-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'

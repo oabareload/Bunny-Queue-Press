@@ -48,6 +48,7 @@ final class Buffer_Queue_DB {
 			created_at datetime NOT NULL,
 			attempts int(10) unsigned NOT NULL DEFAULT 0,
 			last_error text,
+			share_mode varchar(20) NOT NULL DEFAULT 'addToQueue',
 			PRIMARY KEY  (id),
 			KEY post_network_status (post_id, network, status),
 			KEY status_id (status, id)
@@ -65,10 +66,14 @@ final class Buffer_Queue_DB {
 	 * @param string $channel_id
 	 * @param int    $attempts
 	 * @param string $last_error
+	 * @param string $share_mode Either 'addToQueue' or 'shareNow'. Invalid values fall back to 'addToQueue'.
 	 * @return int|false The inserted ID or false on failure.
 	 */
-	public function add_job(int $post_id, string $network, string $channel_id, int $attempts = 0, string $last_error = '') {
+	public function add_job(int $post_id, string $network, string $channel_id, int $attempts = 0, string $last_error = '', string $share_mode = 'addToQueue') {
 		global $wpdb;
+		if (! in_array($share_mode, array('addToQueue', 'shareNow'), true)) {
+			$share_mode = 'addToQueue';
+		}
 		$now = current_time('mysql', true);
 		$result = $wpdb->insert(
 			self::get_table_name(),
@@ -80,8 +85,9 @@ final class Buffer_Queue_DB {
 				'created_at' => $now,
 				'attempts'   => $attempts,
 				'last_error' => $last_error,
+				'share_mode' => $share_mode,
 			),
-			array('%d', '%s', '%s', '%s', '%s', '%d', '%s')
+			array('%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s')
 		);
 		return $result ? $wpdb->insert_id : false;
 	}
@@ -184,6 +190,36 @@ final class Buffer_Queue_DB {
 		return (bool) $wpdb->update($table, $data, array('id' => $job_id), $format, array('%d'));
 	}
 	
+	/**
+	 * Updates the share_mode of a job, but only while it is still 'pending'.
+	 *
+	 * Only 'addToQueue' and 'shareNow' are accepted; any other value is
+	 * rejected outright (returns false) rather than silently normalized,
+	 * since this path is reached from user input via AJAX.
+	 *
+	 * @param int    $job_id
+	 * @param string $share_mode
+	 * @return bool True if the row was updated, false otherwise (invalid value or job no longer pending/not found).
+	 */
+	public function update_share_mode(int $job_id, string $share_mode): bool {
+		if (! in_array($share_mode, array('addToQueue', 'shareNow'), true)) {
+			return false;
+		}
+
+		global $wpdb;
+		$table = self::get_table_name();
+
+		$result = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET share_mode = %s WHERE id = %d AND status = 'pending'",
+				$share_mode,
+				$job_id
+			)
+		);
+
+		return (bool) $result;
+	}
+
 	/**
 	 * Deletes a job from the database.
 	 *

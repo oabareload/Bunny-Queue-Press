@@ -414,4 +414,36 @@
 		}
 	});
 
+	// ── Buffer Queue — per-job Share Mode toggle ───────────────────────────────────────────
+
+	document.addEventListener('change', function (e) {
+		var shareChk = e.target.closest('.qps-lab-queue-sharemode');
+		if (!shareChk) { return; }
+
+		var jobId = shareChk.dataset.id;
+		var nonce = shareChk.dataset.nonce;
+		var wasChecked = !shareChk.checked; // state before this change
+		var shareMode = shareChk.checked ? 'shareNow' : 'addToQueue';
+
+		shareChk.disabled = true;
+
+		post('qps_lab_queue_share_mode', {
+			_ajax_nonce: nonce,
+			job_id: jobId,
+			share_mode: shareMode
+		}).then(function (json) {
+			shareChk.disabled = false;
+			if (!json.success) {
+				// Revert visually to the prior state and surface the error using
+				// the same alert() mechanism used by the other Queue actions.
+				shareChk.checked = wasChecked;
+				alert(json.data && json.data.message ? json.data.message : 'Error saving share mode');
+			}
+		}).catch(function () {
+			shareChk.disabled = false;
+			shareChk.checked = wasChecked;
+			alert('Network error.');
+		});
+	});
+
 }());

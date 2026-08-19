@@ -665,6 +665,16 @@ final class Buffer_Page {
 					value="1"
 					<?php checked(! empty($current)); ?>
 				/>
+
+			<?php elseif ('text' === $field_def['type']) : ?>
+				<input
+					type="text"
+					id="<?php echo esc_attr($input_id); ?>"
+					name="<?php echo esc_attr($input_name); ?>"
+					class="qps-input"
+					value="<?php echo esc_attr((string) $current); ?>"
+					placeholder="<?php echo esc_attr($field_def['placeholder'] ?? ''); ?>"
+				/>
 			<?php endif; ?>
 
 			<?php if (! empty($description)) : ?>

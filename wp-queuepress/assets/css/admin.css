@@ -1393,7 +1393,6 @@ a.qps-card-title-link:hover {
 	padding: 2px 4px;
 	position: absolute;
 	z-index: 1;
-	max-width: 55%; /* occupy ~half the image width */
 }
 
 .qps-platform {

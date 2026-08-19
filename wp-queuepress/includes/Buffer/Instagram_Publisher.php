@@ -160,9 +160,10 @@ final class Instagram_Publisher {
 	 *
 	 * @param int $post_id
 	 * @param string $channel_id
+	 * @param string $share_mode Either 'addToQueue' or 'shareNow'. Only forwarded to the mutation builder.
 	 * @return array
 	 */
-	public function publish_to_channel(int $post_id, string $channel_id): array {
+	public function publish_to_channel(int $post_id, string $channel_id, string $share_mode = 'addToQueue'): array {
 		$cfg = $this->config->get($channel_id, 'instagram');
 
 		$post = get_post($post_id);
@@ -183,7 +184,7 @@ final class Instagram_Publisher {
 		}
 
 		$caption = $this->build_combined_caption($post);
-		$mutation = $this->build_mutation($channel_id, $caption, $asset_urls);
+		$mutation = $this->build_mutation($channel_id, $caption, $asset_urls, $share_mode);
 		$response = $this->client->mutate($mutation);
 
 		$normalized = $this->normalize_response($response, $channel_id);
@@ -303,10 +304,11 @@ final class Instagram_Publisher {
 	 * @param string   $channel_id  Buffer channel ID.
 	 * @param string   $caption     Final caption text.
 	 * @param string[] $asset_urls  Ordered image URLs.
+	 * @param string   $share_mode  Either 'addToQueue' or 'shareNow'. Only forwarded to the mutation builder.
 	 * @return string GraphQL mutation string.
 	 */
-	private function build_mutation(string $channel_id, string $caption, array $asset_urls): string {
-		return Mutation_Commons::build_create_post_mutation_from_image_urls($channel_id, $caption, $asset_urls);
+	private function build_mutation(string $channel_id, string $caption, array $asset_urls, string $share_mode = 'addToQueue'): string {
+		return Mutation_Commons::build_create_post_mutation_from_image_urls($channel_id, $caption, $asset_urls, $share_mode);
 	}
 
 	// -------------------------------------------------------------------------

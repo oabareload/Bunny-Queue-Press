@@ -199,6 +199,10 @@ final class Channel_Config {
 				if (! empty($styles)) {
 					$fields['post_style'] = $this->build_post_style_field($styles);
 				}
+				continue;
+			}
+			if ('board_service_id' === $key) {
+				$fields['board_service_id'] = $this->build_board_service_id_field();
 			}
 		}
 		return $fields;
@@ -341,6 +345,13 @@ final class Channel_Config {
 				$out['post_style'] = in_array($val, $allowed, true)
 					? $val
 					: (string) ($def['default_post_style'] ?? $allowed[0]);
+				continue;
+			}
+			if ('board_service_id' === $key) {
+				$val = isset($raw['board_service_id']) ? (string) $raw['board_service_id'] : '';
+				$val = trim($val);
+				$val = preg_replace('/\D+/', '', $val) ?? '';
+				$out['board_service_id'] = sanitize_text_field($val);
 			}
 		}
 		return $out;
@@ -386,6 +397,20 @@ final class Channel_Config {
 			'description'         => __('Controls how the content is formatted when published.', self::TEXT_DOMAIN),
 			'options'             => $options,
 			'option_descriptions' => $descriptions,
+		);
+	}
+
+	/**
+	 * Returns the field definition for the Pinterest board_service_id text input.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function build_board_service_id_field(): array {
+		return array(
+			'type'        => 'text',
+			'label'       => __('Pinterest Board Service ID', self::TEXT_DOMAIN),
+			'description' => __('Enter the Pinterest Board Service ID provided by Buffer for this channel.', self::TEXT_DOMAIN),
+			'placeholder' => __('e.g. 995014180113111710', self::TEXT_DOMAIN),
 		);
 	}
 }

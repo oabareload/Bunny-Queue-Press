@@ -95,9 +95,9 @@ final class Plugin {
 		
 		add_action('admin_init', static function (): void {
 			$db_version = get_option('qps_buffer_queue_db_version', '0');
-			if ($db_version !== '1.0') {
+			if ($db_version !== '1.1') {
 				Buffer_Queue_DB::create_table();
-				update_option('qps_buffer_queue_db_version', '1.0');
+				update_option('qps_buffer_queue_db_version', '1.1');
 			}
 		});
 

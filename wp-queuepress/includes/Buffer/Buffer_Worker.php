@@ -86,10 +86,15 @@ final class Buffer_Worker {
 		
 		$client = new Buffer_Client($token);
 		$config = new Channel_Config();
-		
+
+		$share_mode = (string) ($job['share_mode'] ?? 'addToQueue');
+		if (! in_array($share_mode, array('addToQueue', 'shareNow'), true)) {
+			$share_mode = 'addToQueue';
+		}
+
 		/** @var object $publisher */
 		$publisher = new $publisher_class($client, $config);
-		$res = $publisher->publish_to_channel($post_id, $channel_id);
+		$res = $publisher->publish_to_channel($post_id, $channel_id, $share_mode);
 		
 		if (! empty($res['success'])) {
 			$db->update_job((int) $job['id'], 'sent');
@@ -105,7 +110,7 @@ final class Buffer_Worker {
 				$attempts = (int) ($job['attempts'] ?? 0) + 1;
 				
 				$db->delete_job((int) $job['id']);
-				$db->add_job($post_id, $service, $channel_id, $attempts, $error_msg);
+				$db->add_job($post_id, $service, $channel_id, $attempts, $error_msg, $share_mode);
 			} else {
 				// Failed
 				$db->update_job((int) $job['id'], 'failed', $error_msg);

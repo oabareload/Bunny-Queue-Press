@@ -98,9 +98,10 @@ final class Threads_Publisher {
      *
      * @param int $post_id
      * @param string $channel_id
+     * @param string $share_mode Either 'addToQueue' or 'shareNow'. Only forwarded to the mutation builder.
      * @return array
      */
-    public function publish_to_channel(int $post_id, string $channel_id): array {
+    public function publish_to_channel(int $post_id, string $channel_id, string $share_mode = 'addToQueue'): array {
         $cfg = $this->config->get($channel_id, 'threads');
 
         $post = get_post($post_id);
@@ -131,9 +132,9 @@ final class Threads_Publisher {
         $link_asset = Mutation_Commons::build_link_asset_from_post($post, $cfg_for_link, $channel_info);
 
         if ('card_link' === $effective_post_style) {
-            $mutation = $this->build_card_link_mutation($post, $cfg, $channel_id, $limit, $link_asset);
+            $mutation = $this->build_card_link_mutation($post, $cfg, $channel_id, $limit, $link_asset, $share_mode);
         } else {
-            $mutation = $this->build_social_post_mutation($post, $cfg, $channel_id, $limit, $is_nsfw, $service_limits, $link_asset);
+            $mutation = $this->build_social_post_mutation($post, $cfg, $channel_id, $limit, $is_nsfw, $service_limits, $link_asset, $share_mode);
         }
 
         $response = $this->client->mutate($mutation);
@@ -152,7 +153,7 @@ final class Threads_Publisher {
      *
      * @return string
      */
-    private function build_card_link_mutation(WP_Post $post, array $cfg, string $channel_id, int $limit, ?array $link_asset): string {
+    private function build_card_link_mutation(WP_Post $post, array $cfg, string $channel_id, int $limit, ?array $link_asset, string $share_mode = 'addToQueue'): string {
         $caption = Publisher_Commons::build_caption(
             $post,
             $cfg,
@@ -172,7 +173,8 @@ final class Threads_Publisher {
                 $caption,
                 $assets,
                 array('detected_post_style' => 'card_link', 'no_link_attachment' => true),
-                'threads'
+                'threads',
+                $share_mode
             );
         }
 
@@ -186,7 +188,8 @@ final class Threads_Publisher {
             $caption,
             $assets,
             array(),
-            'threads'
+            'threads',
+            $share_mode
         );
     }
 
@@ -199,7 +202,7 @@ final class Threads_Publisher {
      *
      * @return string
      */
-    private function build_social_post_mutation(WP_Post $post, array $cfg, string $channel_id, int $limit, bool $is_nsfw, array $service_limits, ?array $link_asset): string {
+    private function build_social_post_mutation(WP_Post $post, array $cfg, string $channel_id, int $limit, bool $is_nsfw, array $service_limits, ?array $link_asset, string $share_mode = 'addToQueue'): string {
         // 1. Intro element: excerpt + permalink. No title. No appended hashtags.
         $intro = Publisher_Commons::build_caption(
             $post,
@@ -333,6 +336,6 @@ final class Threads_Publisher {
             'thread'              => $thread_payload,
         );
 
-        return Mutation_Commons::build_create_post_mutation($channel_id, $intro, $top_assets, $meta, 'threads');
+        return Mutation_Commons::build_create_post_mutation($channel_id, $intro, $top_assets, $meta, 'threads', $share_mode);
     }
 }
