@@ -26,6 +26,14 @@ final class Buffer_Worker {
 	public const CRON_HOOK = 'qps_buffer_queue_worker';
 
 	/**
+	 * WordPress option key storing the configurable auto-retry error rules.
+	 *
+	 * Each rule is an array: array('text' => string, 'match' => 'contains'|'exact').
+	 * When empty, no error is auto-retried and all failures go straight to 'failed'.
+	 */
+	public const OPTION_RETRY_RULES = 'qps_buffer_retry_rules';
+
+	/**
 	 * Registers the worker hooks.
 	 *
 	 * @return void
@@ -103,9 +111,8 @@ final class Buffer_Worker {
 			Publisher_Commons::save_channel_record($post_id, $res);
 		} else {
 			$error_msg = (string) ($res['message'] ?? 'Unknown error');
-			
-			// Check for exact retryable error
-			if (strpos($error_msg, 'Image could not be read from its URL.') !== false) {
+
+			if ($this->is_auto_retryable($error_msg)) {
 				// Retryable: FIFO strategy (delete and reinsert at the end of the queue)
 				$attempts = (int) ($job['attempts'] ?? 0) + 1;
 				
@@ -116,5 +123,47 @@ final class Buffer_Worker {
 				$db->update_job((int) $job['id'], 'failed', $error_msg);
 			}
 		}
+	}
+
+	/**
+	 * Determines whether a Buffer error message matches any configured
+	 * auto-retry rule.
+	 *
+	 * If no rules are configured, this always returns false: with an empty
+	 * rule set there is no automatic retry and every error ends as 'failed'.
+	 * This does not affect the manual "Retry now" action in Lab, which calls
+	 * process_single_job() directly regardless of these rules.
+	 *
+	 * @param string $error_msg
+	 * @return bool
+	 */
+	private function is_auto_retryable(string $error_msg): bool {
+		$rules = get_option(self::OPTION_RETRY_RULES, array());
+		if (! is_array($rules) || empty($rules)) {
+			return false;
+		}
+
+		foreach ($rules as $rule) {
+			if (! is_array($rule)) {
+				continue;
+			}
+
+			$text = (string) ($rule['text'] ?? '');
+			$match = (string) ($rule['match'] ?? '');
+
+			if ($text === '') {
+				continue;
+			}
+
+			if ($match === 'exact' && $error_msg === $text) {
+				return true;
+			}
+
+			if ($match === 'contains' && strpos($error_msg, $text) !== false) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }

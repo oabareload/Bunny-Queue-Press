@@ -446,4 +446,124 @@
 		});
 	});
 
+	// ── Buffer Retry Error Rules ──────────────────────────────────────────────────────────
+
+	var retryRuleAddBtn = document.getElementById('qps-retry-rule-add');
+	var retryRuleTextInput = document.getElementById('qps-retry-rule-text');
+	var retryRuleMatchSelect = document.getElementById('qps-retry-rule-match');
+	var retryRuleErrorEl = document.getElementById('qps-retry-rule-error');
+	var retryRulesTable = document.getElementById('qps-retry-rules-table');
+	var retryRulesTbody = document.getElementById('qps-retry-rules-tbody');
+	var retryRulesEmpty = document.getElementById('qps-retry-rules-empty');
+
+	function showRetryRuleError(msg) {
+		if (!retryRuleErrorEl) { return; }
+		retryRuleErrorEl.textContent = msg;
+		retryRuleErrorEl.hidden = false;
+	}
+
+	function clearRetryRuleError() {
+		if (!retryRuleErrorEl) { return; }
+		retryRuleErrorEl.hidden = true;
+		retryRuleErrorEl.textContent = '';
+	}
+
+	function matchLabel(match) {
+		return match === 'exact' ? 'Exact match' : 'Contains';
+	}
+
+	if (retryRuleAddBtn) {
+		retryRuleAddBtn.addEventListener('click', function () {
+			clearRetryRuleError();
+
+			var text = retryRuleTextInput ? retryRuleTextInput.value.trim() : '';
+			var match = retryRuleMatchSelect ? retryRuleMatchSelect.value : 'contains';
+
+			if (!text) {
+				showRetryRuleError('Error text cannot be empty.');
+				return;
+			}
+
+			retryRuleAddBtn.disabled = true;
+
+			post('qps_lab_retry_rule_add', {
+				_ajax_nonce: retryRuleAddBtn.dataset.nonce,
+				text: text,
+				match: match
+			}).then(function (json) {
+				retryRuleAddBtn.disabled = false;
+
+				if (!json.success) {
+					showRetryRuleError(json.data && json.data.message ? json.data.message : 'Error adding rule.');
+					return;
+				}
+
+				var d = json.data;
+
+				if (retryRulesEmpty) { retryRulesEmpty.hidden = true; }
+				if (retryRulesTable) { retryRulesTable.hidden = false; }
+
+				if (retryRulesTbody) {
+					var tr = document.createElement('tr');
+					tr.id = 'qps-retry-rule-' + d.id;
+
+					var tdText = document.createElement('td');
+					tdText.textContent = d.text;
+
+					var tdMatch = document.createElement('td');
+					tdMatch.textContent = matchLabel(d.match);
+
+					var tdAction = document.createElement('td');
+					var removeBtn = document.createElement('button');
+					removeBtn.type = 'button';
+					removeBtn.className = 'button button-small qps-lab-retry-rule-remove';
+					removeBtn.dataset.id = d.id;
+					removeBtn.dataset.nonce = retryRuleAddBtn.dataset.removeNonce || '';
+					removeBtn.textContent = 'Remove';
+					tdAction.appendChild(removeBtn);
+
+					tr.appendChild(tdText);
+					tr.appendChild(tdMatch);
+					tr.appendChild(tdAction);
+					retryRulesTbody.appendChild(tr);
+				}
+
+				if (retryRuleTextInput) { retryRuleTextInput.value = ''; }
+			}).catch(function () {
+				retryRuleAddBtn.disabled = false;
+				showRetryRuleError('Network error.');
+			});
+		});
+	}
+
+	document.addEventListener('click', function (e) {
+		var removeBtn = e.target.closest('.qps-lab-retry-rule-remove');
+		if (!removeBtn) { return; }
+
+		clearRetryRuleError();
+		var ruleId = removeBtn.dataset.id;
+		var nonce = removeBtn.dataset.nonce;
+		removeBtn.disabled = true;
+
+		post('qps_lab_retry_rule_remove', {
+			_ajax_nonce: nonce,
+			id: ruleId
+		}).then(function (json) {
+			if (json.success) {
+				var row = document.getElementById('qps-retry-rule-' + ruleId);
+				if (row) { row.remove(); }
+				if (retryRulesTbody && retryRulesTbody.children.length === 0) {
+					if (retryRulesTable) { retryRulesTable.hidden = true; }
+					if (retryRulesEmpty) { retryRulesEmpty.hidden = false; }
+				}
+			} else {
+				removeBtn.disabled = false;
+				showRetryRuleError(json.data && json.data.message ? json.data.message : 'Error removing rule.');
+			}
+		}).catch(function () {
+			removeBtn.disabled = false;
+			showRetryRuleError('Network error.');
+		});
+	});
+
 }());

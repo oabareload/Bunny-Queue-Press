@@ -232,6 +232,12 @@ On subsequent requests the guard condition (`$current >= CURRENT_SCHEMA_VERSION`
 
 ## Changelog
 
+### 2.6.11
+
+**Added**
+- Buffer Queue's automatic retry is now configurable from Lab → **Buffer Retry Error Rules**, instead of matching one hardcoded error string. Each rule matches a Buffer error message by `contains` or `exact` text; a match auto-retries the job (same FIFO delete/reinsert behavior as before, still with no retry limit). With zero rules configured, no error is auto-retried and every failure ends as `failed`. Manual **Retry now** is unaffected by these rules. Rules are stored in a single WordPress option (`qps_buffer_retry_rules`), not a new table, and are added/removed instantly via AJAX with duplicate and empty-text validation.
+- **Buffer Queue Jobs** in Lab is now paginated (20 jobs per page) using standard WordPress pagination links, so the query is limited via `LIMIT`/`OFFSET` instead of loading up to 100 rows unconditionally. Columns and actions (Retry now, Cancel/Remove, Share now) are unchanged.
+
 ### 2.6.10
 
 **Added**

@@ -242,6 +242,42 @@ final class Buffer_Queue_DB {
 		$table = self::get_table_name();
 		return $wpdb->get_results("SELECT * FROM {$table} ORDER BY created_at DESC LIMIT 100", ARRAY_A) ?: array();
 	}
+
+	/**
+	 * Fetches a single page of jobs for the Lab UI, most recent first.
+	 *
+	 * @param int $page     1-indexed page number.
+	 * @param int $per_page Rows per page.
+	 * @return array
+	 */
+	public function get_paginated_jobs(int $page, int $per_page): array {
+		global $wpdb;
+		$table = self::get_table_name();
+
+		$page     = max(1, $page);
+		$per_page = max(1, $per_page);
+		$offset   = ($page - 1) * $per_page;
+
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} ORDER BY created_at DESC LIMIT %d OFFSET %d",
+				$per_page,
+				$offset
+			),
+			ARRAY_A
+		) ?: array();
+	}
+
+	/**
+	 * Counts the total number of jobs in the queue table (all statuses).
+	 *
+	 * @return int
+	 */
+	public function count_jobs(): int {
+		global $wpdb;
+		$table = self::get_table_name();
+		return (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+	}
 	
 	/**
 	 * Gets a single job by ID.

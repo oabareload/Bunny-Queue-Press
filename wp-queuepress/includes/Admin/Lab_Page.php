@@ -80,6 +80,19 @@ final class Lab_Page {
 	private const NONCE_QUEUE_RETRY = 'qps_lab_queue_retry';
 	private const NONCE_QUEUE_CANCEL = 'qps_lab_queue_cancel';
 	private const NONCE_QUEUE_SHARE_MODE = 'qps_lab_queue_share_mode';
+	private const NONCE_RETRY_RULE_ADD = 'qps_lab_retry_rule_add';
+	private const NONCE_RETRY_RULE_REMOVE = 'qps_lab_retry_rule_remove';
+
+	/**
+	 * WordPress option key storing the configurable auto-retry error rules.
+	 * Shared with Buffer_Worker::OPTION_RETRY_RULES (same option name).
+	 */
+	private const OPTION_RETRY_RULES = 'qps_buffer_retry_rules';
+
+	/**
+	 * Number of Buffer Queue jobs shown per page in Lab.
+	 */
+	private const QUEUE_JOBS_PER_PAGE = 20;
 
 	// -------------------------------------------------------------------------
 	// Registration
@@ -99,6 +112,8 @@ final class Lab_Page {
 		add_action('wp_ajax_qps_lab_queue_retry',     array($this, 'handle_queue_retry'));
 		add_action('wp_ajax_qps_lab_queue_cancel',    array($this, 'handle_queue_cancel'));
 		add_action('wp_ajax_qps_lab_queue_share_mode', array($this, 'handle_queue_share_mode'));
+		add_action('wp_ajax_qps_lab_retry_rule_add',    array($this, 'handle_retry_rule_add'));
+		add_action('wp_ajax_qps_lab_retry_rule_remove', array($this, 'handle_retry_rule_remove'));
 	}
 
 	// -------------------------------------------------------------------------
@@ -363,6 +378,127 @@ final class Lab_Page {
 		wp_send_json_success(array('job_id' => $job_id, 'share_mode' => $share_mode));
 	}
 
+	/**
+	 * Returns the stored auto-retry error rules.
+	 *
+	 * @return array<int,array{text:string,match:string}>
+	 */
+	private function get_retry_rules(): array {
+		$rules = get_option(self::OPTION_RETRY_RULES, array());
+		return is_array($rules) ? $rules : array();
+	}
+
+	/**
+	 * Builds the stable identifier used to reference a rule in the UI
+	 * (add/remove), derived from its content rather than a stored ID.
+	 *
+	 * @param string $text
+	 * @param string $match
+	 * @return string
+	 */
+	private function retry_rule_id(string $text, string $match): string {
+		return md5($text . '|' . $match);
+	}
+
+	/**
+	 * AJAX — adds a new auto-retry error rule.
+	 *
+	 * POST params:
+	 *   _ajax_nonce  Nonce for qps_lab_retry_rule_add.
+	 *   text         Error text to match.
+	 *   match        'contains' or 'exact'.
+	 *
+	 * @return void
+	 */
+	public function handle_retry_rule_add(): void {
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied.', 'wp-queuepress')), 403);
+		}
+
+		$nonce = isset($_POST['_ajax_nonce']) ? sanitize_text_field(wp_unslash($_POST['_ajax_nonce'])) : '';
+		if (! wp_verify_nonce($nonce, self::NONCE_RETRY_RULE_ADD)) {
+			wp_send_json_error(array('message' => __('Security check failed.', 'wp-queuepress')), 403);
+		}
+
+		$text = isset($_POST['text']) ? sanitize_text_field(wp_unslash($_POST['text'])) : '';
+		$text = trim($text);
+		$match = isset($_POST['match']) ? sanitize_text_field(wp_unslash($_POST['match'])) : '';
+
+		if ('' === $text) {
+			wp_send_json_error(array('message' => __('Error text cannot be empty.', 'wp-queuepress')), 400);
+		}
+
+		if (! in_array($match, array('contains', 'exact'), true)) {
+			wp_send_json_error(array('message' => __('Invalid match type.', 'wp-queuepress')), 400);
+		}
+
+		$rules = $this->get_retry_rules();
+		$new_id = $this->retry_rule_id($text, $match);
+
+		foreach ($rules as $rule) {
+			$existing_text = (string) ($rule['text'] ?? '');
+			$existing_match = (string) ($rule['match'] ?? '');
+			if ($this->retry_rule_id($existing_text, $existing_match) === $new_id) {
+				wp_send_json_error(array('message' => __('That rule already exists.', 'wp-queuepress')), 409);
+			}
+		}
+
+		$rules[] = array('text' => $text, 'match' => $match);
+		update_option(self::OPTION_RETRY_RULES, $rules);
+
+		wp_send_json_success(array(
+			'id'    => $new_id,
+			'text'  => $text,
+			'match' => $match,
+		));
+	}
+
+	/**
+	 * AJAX — removes an auto-retry error rule by its content-derived ID.
+	 *
+	 * POST params:
+	 *   _ajax_nonce  Nonce for qps_lab_retry_rule_remove.
+	 *   id           Rule ID (md5 of "text|match").
+	 *
+	 * @return void
+	 */
+	public function handle_retry_rule_remove(): void {
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied.', 'wp-queuepress')), 403);
+		}
+
+		$nonce = isset($_POST['_ajax_nonce']) ? sanitize_text_field(wp_unslash($_POST['_ajax_nonce'])) : '';
+		if (! wp_verify_nonce($nonce, self::NONCE_RETRY_RULE_REMOVE)) {
+			wp_send_json_error(array('message' => __('Security check failed.', 'wp-queuepress')), 403);
+		}
+
+		$id = isset($_POST['id']) ? sanitize_text_field(wp_unslash($_POST['id'])) : '';
+		if ('' === $id) {
+			wp_send_json_error(array('message' => __('Missing rule ID.', 'wp-queuepress')), 400);
+		}
+
+		$rules = $this->get_retry_rules();
+		$filtered = array();
+		$found = false;
+
+		foreach ($rules as $rule) {
+			$existing_text = (string) ($rule['text'] ?? '');
+			$existing_match = (string) ($rule['match'] ?? '');
+			if ($this->retry_rule_id($existing_text, $existing_match) === $id) {
+				$found = true;
+				continue;
+			}
+			$filtered[] = $rule;
+		}
+
+		if (! $found) {
+			wp_send_json_error(array('message' => __('Rule not found.', 'wp-queuepress')), 404);
+		}
+
+		update_option(self::OPTION_RETRY_RULES, array_values($filtered));
+		wp_send_json_success(array('id' => $id));
+	}
+
 	// -------------------------------------------------------------------------
 	// Render
 	// -------------------------------------------------------------------------
@@ -384,8 +520,15 @@ final class Lab_Page {
 		$entries       = $lab_enabled ? Buffer_Debug::get_entries() : array();
 		
 		$db = new Buffer_Queue_DB();
-		$queue_jobs = $db->get_all_jobs();
+		$total_jobs = $db->count_jobs();
+		$total_pages = max(1, (int) ceil($total_jobs / self::QUEUE_JOBS_PER_PAGE));
+		$current_page = isset($_GET['queue_page']) ? max(1, (int) $_GET['queue_page']) : 1;
+		if ($current_page > $total_pages) {
+			$current_page = $total_pages;
+		}
+		$queue_jobs = $db->get_paginated_jobs($current_page, self::QUEUE_JOBS_PER_PAGE);
 		$queue_settings = get_option('qps_lab_queue_settings', array('enabled' => false, 'interval' => 15));
+		$retry_rules = $this->get_retry_rules();
 		?>
 		<div class="wrap bunny-wrap">
 			<?php Admin_Header::render(self::PAGE_SLUG); ?>
@@ -394,7 +537,7 @@ final class Lab_Page {
 				<?php if (! $lab_enabled) : ?>
 					<?php $this->render_locked_state(); ?>
 				<?php else : ?>
-					<?php $this->render_lab($has_token, $debug_enabled, $entries, $queue_settings, $queue_jobs); ?>
+					<?php $this->render_lab($has_token, $debug_enabled, $entries, $queue_settings, $queue_jobs, $current_page, $total_pages, $total_jobs, $retry_rules); ?>
 				<?php endif; ?>
 
 			</div><!-- .bunny-page-content -->
@@ -469,10 +612,14 @@ final class Lab_Page {
 	 * @param bool                          $debug_enabled  Whether debug logging is currently on.
 	 * @param array<int,array<string,mixed>> $entries        Current debug log entries.
 	* @param array<string,mixed>           $queue_settings Queue settings array (enabled, interval).
-	* @param array<int,array<string,mixed>> $queue_jobs     Jobs fetched from the Buffer queue DB.
+	* @param array<int,array<string,mixed>> $queue_jobs     Jobs fetched from the Buffer queue DB (current page only).
+	* @param int                            $current_page   Current 1-indexed queue jobs page.
+	* @param int                            $total_pages    Total number of queue jobs pages.
+	* @param int                            $total_jobs     Total number of jobs across all pages.
+	* @param array<int,array{text:string,match:string}> $retry_rules Configured auto-retry error rules.
 	 * @return void
 	 */
-    private function render_lab(bool $has_token, bool $debug_enabled, array $entries, array $queue_settings, array $queue_jobs): void {
+    private function render_lab(bool $has_token, bool $debug_enabled, array $entries, array $queue_settings, array $queue_jobs, int $current_page, int $total_pages, int $total_jobs, array $retry_rules): void {
 		?>
 		<div class="qps-lab-grid">
 
@@ -840,9 +987,86 @@ final class Lab_Page {
 							</tbody>
 						</table>
 						</div>
+						<?php if ($total_pages > 1) : ?>
+							<div class="qps-queue-pagination tablenav-pages">
+								<?php
+								/* translators: %s: total number of Buffer Queue jobs across all pages. */
+								printf('<span class="displaying-num">%s</span> ', esc_html(sprintf(_n('%s item', '%s items', $total_jobs, 'wp-queuepress'), number_format_i18n($total_jobs))));
+								echo wp_kses_post(paginate_links(array(
+									'base'      => add_query_arg('queue_page', '%#%'),
+									'format'    => '',
+									'current'   => $current_page,
+									'total'     => $total_pages,
+									'prev_text' => __('&laquo; Previous', 'wp-queuepress'),
+									'next_text' => __('Next &raquo;', 'wp-queuepress'),
+									'type'      => 'plain',
+								)) ?? '');
+								?>
+							</div>
+						<?php endif; ?>
 					<?php endif; ?>
 				</div>
 			</div><!-- Card 5 -->
+
+			<!-- ── Card 6: Buffer Retry Error Rules ── -->
+			<div class="qps-lab-card qps-lab-card--retry-rules">
+				<div class="qps-lab-card-header">
+					<h2 class="qps-lab-card-title"><?php esc_html_e('Buffer Retry Error Rules', 'wp-queuepress'); ?></h2>
+				</div>
+				<div class="qps-lab-card-body">
+					<p class="description">
+						<?php esc_html_e('Buffer errors matching a rule below are automatically retried (deleted and reinserted at the end of the queue) with no retry limit. If no rules are configured, no automatic retry happens and every error ends as Failed. This does not affect the manual “Retry now” action.', 'wp-queuepress'); ?>
+					</p>
+
+					<?php if (empty($retry_rules)) : ?>
+						<p id="qps-retry-rules-empty"><?php esc_html_e('No retry rules configured. All errors currently end as Failed.', 'wp-queuepress'); ?></p>
+					<?php endif; ?>
+
+					<table class="qps-queue-table" id="qps-retry-rules-table" <?php echo empty($retry_rules) ? 'hidden' : ''; ?>>
+						<thead>
+							<tr>
+								<th><?php esc_html_e('Error text', 'wp-queuepress'); ?></th>
+								<th><?php esc_html_e('Match', 'wp-queuepress'); ?></th>
+								<th><?php esc_html_e('Action', 'wp-queuepress'); ?></th>
+							</tr>
+						</thead>
+						<tbody id="qps-retry-rules-tbody">
+							<?php foreach ($retry_rules as $rule) : ?>
+								<?php
+								$rule_text = (string) ($rule['text'] ?? '');
+								$rule_match = (string) ($rule['match'] ?? '');
+								$rule_id = $this->retry_rule_id($rule_text, $rule_match);
+								?>
+								<tr id="qps-retry-rule-<?php echo esc_attr($rule_id); ?>">
+									<td><?php echo esc_html($rule_text); ?></td>
+									<td><?php echo esc_html('exact' === $rule_match ? __('Exact match', 'wp-queuepress') : __('Contains', 'wp-queuepress')); ?></td>
+									<td>
+										<button type="button" class="button button-small qps-lab-retry-rule-remove" data-id="<?php echo esc_attr($rule_id); ?>" data-nonce="<?php echo esc_attr(wp_create_nonce(self::NONCE_RETRY_RULE_REMOVE)); ?>">
+											<?php esc_html_e('Remove', 'wp-queuepress'); ?>
+										</button>
+									</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+
+					<div class="qps-retry-rule-form" style="margin-top:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+						<label for="qps-retry-rule-text" class="screen-reader-text"><?php esc_html_e('Error text', 'wp-queuepress'); ?></label>
+						<input type="text" id="qps-retry-rule-text" placeholder="<?php esc_attr_e('Error text', 'wp-queuepress'); ?>" style="min-width:320px;" />
+
+						<label for="qps-retry-rule-match" class="screen-reader-text"><?php esc_html_e('Match type', 'wp-queuepress'); ?></label>
+						<select id="qps-retry-rule-match">
+							<option value="contains"><?php esc_html_e('Contains', 'wp-queuepress'); ?></option>
+							<option value="exact"><?php esc_html_e('Exact match', 'wp-queuepress'); ?></option>
+						</select>
+
+						<button type="button" id="qps-retry-rule-add" class="button button-primary" data-nonce="<?php echo esc_attr(wp_create_nonce(self::NONCE_RETRY_RULE_ADD)); ?>" data-remove-nonce="<?php echo esc_attr(wp_create_nonce(self::NONCE_RETRY_RULE_REMOVE)); ?>">
+							<?php esc_html_e('Add rule', 'wp-queuepress'); ?>
+						</button>
+					</div>
+					<div id="qps-retry-rule-error" class="qps-lab-error-msg" hidden></div>
+				</div>
+			</div><!-- Card 6 -->
 
 		</div><!-- .qps-lab-grid -->
 		<?php
