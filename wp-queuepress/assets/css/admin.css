@@ -1451,6 +1451,12 @@ button.qps-platform:focus-visible,
 	color: #f0b400;
 }
 
+/* Buffer Queue job actively pending/processing (our internal job queue,
+   distinct from Buffer's own "pending" scheduling status above). */
+.qps-platform--queue-active {
+	color: #3b82f6;
+}
+
 .qps-platform--error {
 	color: #ff6b6b;
 }

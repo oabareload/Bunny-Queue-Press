@@ -116,15 +116,26 @@
 				'qps-platform--pending',
 				'qps-platform--scheduled',
 				'qps-platform--queued',
-				'qps-platform--added_to_queue'
+				'qps-platform--added_to_queue',
+				'qps-platform--queue-active'
 			);
 			if ( r.success ) {
 				var statusClass = 'qps-platform--success';
-				var knownGreen	= [ 'scheduled', 'queued', 'added_to_queue', 'success' ];
-				if ( r.status && knownGreen.indexOf( r.status.toLowerCase() ) !== -1 ) {
-					statusClass = 'qps-platform--' + r.status.toLowerCase();
+				if ( r.queued ) {
+					// Buffer Queue accepted the job but hasn't processed it yet:
+					// show blue (queue-active), same as a page reload would.
+					statusClass = 'qps-platform--queue-active';
+				} else {
+					var knownGreen	= [ 'scheduled', 'queued', 'added_to_queue', 'success' ];
+					if ( r.status && knownGreen.indexOf( r.status.toLowerCase() ) !== -1 ) {
+						statusClass = 'qps-platform--' + r.status.toLowerCase();
+					}
 				}
 				platform.classList.add( statusClass );
+				// Both the queued (blue) and sent (green) states are not clickable,
+				// so a second job can't be created for the same post_id + network
+				// without a page reload swapping the button for a <span>.
+				platform.classList.remove( 'qps-platform--clickable' );
 			} else {
 				platform.classList.add( 'qps-platform--error' );
 			}
@@ -156,9 +167,15 @@
 				'qps-platform--scheduled',
 				'qps-platform--queued',
 				'qps-platform--added_to_queue',
+				'qps-platform--queue-active',
 				'qps-platform--busy'
 			);
 			p.classList.add( 'qps-platform--idle' );
+			// Idle is always clickable (defense in depth: the resend AJAX also
+			// re-validates before creating a job). success/queued strip this
+			// class in updatePlatformStrip(); restore it since delete clears
+			// the record back to "not sent".
+			p.classList.add( 'qps-platform--clickable' );
 			p.setAttribute( 'title', '' );
 		} );
 	}

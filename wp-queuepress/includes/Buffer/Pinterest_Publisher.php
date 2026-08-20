@@ -239,6 +239,11 @@ final class Pinterest_Publisher {
 			'UTF-8'
 		);
 
+		// Pinterest limits Pin titles to 100 characters.
+		if (mb_strlen($title, 'UTF-8') > 100) {
+			$title = mb_substr($title, 0, 99, 'UTF-8') . '…';
+		}
+
 		$url = Publisher_Commons::get_pretty_post_url($post);
 
 		$meta = array(

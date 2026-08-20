@@ -28,6 +28,7 @@ namespace QueuePostScheduler\Admin;
 use DateTimeImmutable;
 use DateTimeZone;
 use QueuePostScheduler\Buffer\Buffer_Ajax;
+use QueuePostScheduler\Buffer\Buffer_Queue_DB;
 use QueuePostScheduler\Buffer\Channel_Config;
 use QueuePostScheduler\Buffer\Platform_Registry;
 use QueuePostScheduler\Schedule\Post_Query;
@@ -305,6 +306,15 @@ final class Pipeline_Page {
 		$channel_config = new Channel_Config();
 		$active_slugs   = array_flip(Platform_Registry::active_slugs($channel_config));
 
+		// Single batched lookup of active (pending/processing) Buffer Queue jobs
+		// for every post in this column, keyed by "{post_id}:{network}". Avoids
+		// one query per card/platform — this is the only Buffer Queue query in
+		// this method regardless of how many posts or platforms are rendered.
+		$post_ids_in_column = array_map(static function (\WP_Post $p): int { return (int) $p->ID; }, $posts);
+		$queue_status_map   = ! empty($post_ids_in_column)
+			? (new Buffer_Queue_DB())->get_active_status_map($post_ids_in_column)
+			: array();
+
 		foreach ($posts as $post) {
 			$post_time     = new DateTimeImmutable($post->post_date, $timezone);
 			$edit_url      = get_edit_post_link($post->ID);
@@ -479,21 +489,42 @@ final class Pipeline_Page {
 									$state_label    = $resolved['label'];
 									$tooltip_date   = $resolved['date'];
 								}
+
+								// A job actively pending/processing in Buffer Queue takes priority
+								// over any stale meta-derived state: the record can't be both
+								// "sent"/"error" and still active in the queue at the same time.
+								$queue_key       = $post->ID . ':' . $slug;
+								$queue_status    = $queue_status_map[$queue_key] ?? null;
+								$is_queue_active = null !== $queue_status;
+								if ($is_queue_active) {
+									$state_modifier = 'qps-platform--queue-active';
+									$state_label    = ('processing' === $queue_status)
+										? __('Processing', 'wp-queuepress')
+										: __('Queued', 'wp-queuepress');
+									$tooltip_date   = '';
+								}
+
 								$platform_label 	= Platform_Registry::label($slug);
 								$tooltip        	= $platform_label . "\n" . $state_label;
 								if ($tooltip_date !== '') {
 									$tooltip .= "\n" . $tooltip_date;
 								}
-								// Clickable whenever this platform has at least one enabled channel,
-								// regardless of whether a Buffer record was previously saved.
-								// Label adapts: "Send to X" (no record) vs "Re-send to X" (record exists).
+								// Clickable only for the idle (gray) and error (red) states, i.e.
+								// when the platform has at least one enabled channel, the post is
+								// publishable, and there is no active queue job or successful send
+								// blocking a re-send. Green (sent) and blue (queued/processing) are
+								// intentionally never clickable, so the Pipeline can never create a
+								// second job for the same post_id + network.
+								$is_success_state 	= in_array($state_modifier, array(
+									'qps-platform--success',
+									'qps-platform--scheduled',
+									'qps-platform--queued',
+									'qps-platform--added_to_queue',
+								), true);
 								$has_channel    	= isset($active_slugs[$slug]);
-								$clickable_class 	= ($has_channel && $is_publishable)
-									? ' qps-platform--clickable'
-									: '';
-								$tag 				= ($has_channel && $is_publishable)
-									? 'button'
-									: 'span';
+								$clickable      	= $has_channel && $is_publishable && ! $is_queue_active && ! $is_success_state;
+								$clickable_class 	= $clickable ? ' qps-platform--clickable' : '';
+								$tag 				= $clickable ? 'button' : 'span';
 								$action_label  		= $has_record
 									? sprintf(
 										/* translators: %s: platform name. */
@@ -505,7 +536,7 @@ final class Pipeline_Page {
 										__('Send to %s', 'wp-queuepress'),
 										$platform_label
 									);
-								$extra_attrs 		= ($has_channel && $is_publishable)
+								$extra_attrs 		= $clickable
 									? ' type="button"'
 									  . ' data-post-id="' . esc_attr((string) $post->ID) . '"'
 									  . ' data-service="' . esc_attr($slug) . '"'

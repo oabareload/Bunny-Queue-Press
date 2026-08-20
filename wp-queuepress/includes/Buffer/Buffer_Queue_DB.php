@@ -290,4 +290,46 @@ final class Buffer_Queue_DB {
 		$table = self::get_table_name();
 		return $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id = %d", $job_id), ARRAY_A);
 	}
+
+	/**
+	 * Builds a post_id:network → status map for every job currently 'pending'
+	 * or 'processing', restricted to the given post IDs.
+	 *
+	 * Intended for Pipeline rendering: called ONCE per batch of posts (not per
+	 * post, not per platform) so a page with many cards issues a single query
+	 * instead of one per post_id+network combination.
+	 *
+	 * @param array<int,int> $post_ids Post IDs to check. Empty input short-circuits
+	 *                                  without querying the database.
+	 * @return array<string,string> Map of "{post_id}:{network}" => 'pending'|'processing'.
+	 */
+	public function get_active_status_map(array $post_ids): array {
+		$post_ids = array_values(array_unique(array_filter(array_map('intval', $post_ids), static function (int $id): bool {
+			return $id > 0;
+		})));
+
+		if (empty($post_ids)) {
+			return array();
+		}
+
+		global $wpdb;
+		$table = self::get_table_name();
+		$placeholders = implode(',', array_fill(0, count($post_ids), '%d'));
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT post_id, network, status FROM {$table} WHERE status IN ('pending', 'processing') AND post_id IN ({$placeholders})",
+				...$post_ids
+			),
+			ARRAY_A
+		) ?: array();
+
+		$map = array();
+		foreach ($rows as $row) {
+			$key = ((int) $row['post_id']) . ':' . (string) $row['network'];
+			$map[$key] = (string) $row['status'];
+		}
+
+		return $map;
+	}
 }
