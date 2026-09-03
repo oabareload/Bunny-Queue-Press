@@ -72,6 +72,43 @@ final class Queue_Commit_Handler {
 	 */
 	public function register(): void {
 		add_action('transition_post_status', array($this, 'commit_queue_mode'), 10, 3);
+		add_filter('wp_insert_post_data', array($this, 'guard_publish_status'), 10, 2);
+	}
+
+	/**
+	 * Prevents an already-published post from being silently converted to
+	 * 'future' by WordPress core's date-based status promotion when that
+	 * promotion is a side effect of stray QueuePress queue intent meta.
+	 *
+	 * This runs before the database write (wp_insert_post_data), so it stops
+	 * the transition itself rather than reacting to it after the fact.
+	 *
+	 * @param array $data    Sanitized post data about to be saved.
+	 * @param array $postarr Raw post array passed to wp_insert_post().
+	 * @return array
+	 */
+	public function guard_publish_status(array $data, array $postarr): array {
+		if (empty($postarr['ID']) || ! isset($data['post_status']) || 'future' !== $data['post_status']) {
+			return $data;
+		}
+
+		$post_id  = (int) $postarr['ID'];
+		$existing = get_post($post_id);
+
+		if (! $existing instanceof \WP_Post || 'publish' !== $existing->post_status) {
+			return $data;
+		}
+
+		// Only intervene when QueuePress queue intent is present on this post;
+		// a deliberate reschedule of a published post through unrelated means
+		// is left untouched.
+		if ('' === (string) get_post_meta($post_id, self::META_KEY, true)) {
+			return $data;
+		}
+
+		$data['post_status'] = 'publish';
+
+		return $data;
 	}
 
 	/**
@@ -87,16 +124,22 @@ final class Queue_Commit_Handler {
 			return;
 		}
 
-		// Handle future -> draft transition: perform a controlled cleanup to prevent obsolete state persistence.
-		if ('future' === $old_status) {
-			if ('draft' === $new_status) {
-				delete_post_meta((int) $post->ID, self::META_KEY);
-				clean_post_cache((int) $post->ID);
-			}
+		// future -> draft: controlled cleanup to prevent obsolete state persistence.
+		if ('future' === $old_status && 'draft' === $new_status) {
+			delete_post_meta((int) $post->ID, self::META_KEY);
+			clean_post_cache((int) $post->ID);
 			return;
 		}
 
-		if ('future' !== $new_status) {
+		// Queue intent is a draft-only, one-time signal: only a genuine
+		// draft -> future transition may commit a plan. Any other path
+		// (future -> future resave, publish -> publish resave, or a
+		// publish -> future transition however it might occur) must not
+		// act on the intent, and must not let it persist either.
+		if ('future' !== $new_status || 'draft' !== $old_status) {
+			if (in_array($new_status, array('publish', 'future'), true)) {
+				delete_post_meta((int) $post->ID, self::META_KEY);
+			}
 			return;
 		}
 

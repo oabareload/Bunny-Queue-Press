@@ -94,7 +94,10 @@ final class Buffer_Queue_DB {
 
 	/**
 	 * Gets a list of active jobs for a given post and network.
-	 * Active jobs are those that are pending, processing, or failed (blocks pipeline until retry/cancel).
+	 * Active jobs are only those that are pending or processing. A previous
+	 * 'failed', 'cancelled', or 'sent' job must never block a new send attempt
+	 * — duplicate protection depends exclusively on a job currently being
+	 * pending or processing, never on send history.
 	 *
 	 * @param int    $post_id
 	 * @param string $network
@@ -105,7 +108,7 @@ final class Buffer_Queue_DB {
 		$table = self::get_table_name();
 		return $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE post_id = %d AND network = %s AND status IN ('pending', 'processing', 'failed')",
+				"SELECT * FROM {$table} WHERE post_id = %d AND network = %s AND status IN ('pending', 'processing')",
 				$post_id,
 				$network
 			),

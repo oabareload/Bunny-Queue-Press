@@ -97,8 +97,12 @@
 			return function () { unlockAutosaving(LOCK_KEY); };
 		}, [mode]);
 
-		// Automatically recalculate slot when opening a draft with a pre-existing queue mode
+		// Automatically recalculate slot when opening a draft with a pre-existing queue mode.
+		// Guarded to 'draft' only: this effect always runs (hooks can't be conditional),
+		// so without this guard a post that already left draft (future/publish) but still
+		// carries stray queue-mode meta would have its date silently pushed forward here.
 		useEffect(function () {
+			if ('draft' !== postStatus) { return; }
 			if (postId && 'none' !== mode && null === slotInfo && !isLoading) {
 				setIsLoading(true);
 				apiFetch({
@@ -235,8 +239,10 @@
 		}
 
 		// ── Early exit ────────────────────────────────────────────────────────────
+		// Queue mode / Share Mode only ever applies to drafts: once a post is
+		// scheduled (future) or published, the panel must not show or act.
 
-		if (!postId || postStatus === 'publish') { return null; }
+		if (!postId || 'draft' !== postStatus) { return null; }
 
 		// ── Derived display values ────────────────────────────────────────────────
 

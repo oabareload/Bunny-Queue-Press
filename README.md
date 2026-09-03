@@ -104,7 +104,7 @@ Any other error marks the job as `failed` without automatic retry.
 
 ### Pipeline blocking
 
-While a job exists in `pending`, `processing`, or `failed` status for a given `post_id + network` combination, the pipeline blocks creating a duplicate job. The administrator must use **Retry now** or **Cancel** from Lab before re-sending.
+While a job exists in `pending` or `processing` status for a given `post_id + network` combination, the pipeline blocks creating a duplicate job (shown as the blue "queued/processing" state on the platform icon). A `failed`, `cancelled`, or `sent` job never blocks a new send — the icon (green, gray, or red) remains clickable for any post with status Published, and clicking it starts a new attempt for that network.
 
 ### Manual actions (Lab)
 

@@ -71,13 +71,14 @@ final class Buffer_Ajax {
 	private const NONCE_DELETE_PREFIX = 'qps_delete_buffer_posts_';
 
 	/**
-	 * Post statuses that are allowed to be sent to Buffer for the first time.
+	 * Post statuses that are allowed to be sent to Buffer, whether for the
+	 * first time or as a manual re-send from the Pipeline.
 	 *
-	 * Server-side enforcement of the "no drafts" rule. The Pipeline UI also
-	 * disables the action visually, but the check is duplicated here so a
-	 * crafted request cannot bypass it.
+	 * Server-side enforcement of the "published only" rule. The Pipeline UI
+	 * also disables the action visually, but the check is duplicated here so
+	 * a crafted request cannot bypass it.
 	 */
-	private const PUBLISHABLE_STATUSES = array('publish', 'future');
+	private const PUBLISHABLE_STATUSES = array('publish');
 
 	/**
 	 * Registers WordPress AJAX hooks.
@@ -177,8 +178,11 @@ final class Buffer_Ajax {
 	 * Handles the qps_send_to_buffer_service AJAX action (single-platform resend).
 	 *
 	 * Re-uses the same publish_to_services helper but scopes it to a single
-	 * service. This endpoint is NOT blocked by post_status — the user is
-	 * explicitly asking to re-send an already-published post.
+	 * service. The post must currently have status 'publish' — this is
+	 * enforced here via get_post_status_or_error(), the same check used by
+	 * the full "Send to Buffer" action, so a manual re-send of an already
+	 * published post is allowed but any other status is rejected regardless
+	 * of the per-platform state shown in the Pipeline (sent, error, or idle).
 	 *
 	 * @return void
 	 */
@@ -200,6 +204,11 @@ final class Buffer_Ajax {
 
 		if (! current_user_can('edit_post', $post_id)) {
 			wp_send_json_error(array('message' => __('You do not have permission to publish this post.', 'wp-queuepress')), 403);
+		}
+
+		$status = $this->get_post_status_or_error($post_id);
+		if (is_wp_error($status)) {
+			wp_send_json_error(array('message' => $status->get_error_message()), 400);
 		}
 
 		$results = $this->publish_to_services($post_id, array($service));
@@ -467,7 +476,7 @@ final class Buffer_Ajax {
 		if (! in_array($post->post_status, self::PUBLISHABLE_STATUSES, true)) {
 			return new \WP_Error(
 				'qps_post_not_publishable',
-				__('Only published or scheduled posts can be sent to Buffer.', 'wp-queuepress')
+				__('Only published posts can be sent to Buffer.', 'wp-queuepress')
 			);
 		}
 		return $post->post_status;

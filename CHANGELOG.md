@@ -1,5 +1,15 @@
 # Changelog
 
+### 2.6.14
+
+**Fixed**
+- Fixed a regression in the Pipeline where a platform icon that had already been sent successfully (green) became permanently non-clickable, with no way to resend that post to that network manually. Sending is now allowed for any post with status Published, in any per-platform state (not sent, sent, or error), and is blocked only while an active job for that post and network is pending or processing in Buffer Queue — never because of prior send history. This is enforced both in the Pipeline UI and in the request that processes the send.
+
+### 2.6.13
+
+**Fixed**
+- Fixed an already-published post occasionally being converted to a scheduled (future) post on save, and re-entering the Queue flow. The editor's Queue mode panel now only shows and applies to draft posts; scheduled and published posts can no longer be affected by it, even when saving from a stale editor session.
+
 ### 2.6.12
 
 **Improved**

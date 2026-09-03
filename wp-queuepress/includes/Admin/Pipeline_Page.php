@@ -509,20 +509,15 @@ final class Pipeline_Page {
 								if ($tooltip_date !== '') {
 									$tooltip .= "\n" . $tooltip_date;
 								}
-								// Clickable only for the idle (gray) and error (red) states, i.e.
-								// when the platform has at least one enabled channel, the post is
-								// publishable, and there is no active queue job or successful send
-								// blocking a re-send. Green (sent) and blue (queued/processing) are
-								// intentionally never clickable, so the Pipeline can never create a
-								// second job for the same post_id + network.
-								$is_success_state 	= in_array($state_modifier, array(
-									'qps-platform--success',
-									'qps-platform--scheduled',
-									'qps-platform--queued',
-									'qps-platform--added_to_queue',
-								), true);
+								// Clickable whenever the platform has at least one enabled channel,
+								// the post is publishable, and there is no ACTIVE queue job
+								// (pending/processing) for this post_id + network. This applies to
+								// idle (gray), error (red), and success (green) alike, so a
+								// completed send can always be re-sent manually. Only an active
+								// queue job (blue) blocks the click - duplicate protection depends
+								// exclusively on that, never on prior send history.
 								$has_channel    	= isset($active_slugs[$slug]);
-								$clickable      	= $has_channel && $is_publishable && ! $is_queue_active && ! $is_success_state;
+								$clickable      	= $has_channel && $is_publishable && ! $is_queue_active;
 								$clickable_class 	= $clickable ? ' qps-platform--clickable' : '';
 								$tag 				= $clickable ? 'button' : 'span';
 								$action_label  		= $has_record
