@@ -21,6 +21,8 @@ final class Slot_Repository {
 	 * WordPress option name for weekly slot configuration.
 	 */
 	public const OPTION_NAME = 'qps_weekly_slots';
+	public const MEDIA_OPTION_NAME = 'wp_queuepress_media_slots';
+	public const MINIMUM_SLOT_TIME = '05:00';
 
 	/**
 	 * Returns supported weekdays in storage order.
@@ -44,8 +46,9 @@ final class Slot_Repository {
 	 *
 	 * @return array<string,array<int,string>>
 	 */
-	public function get_weekly_slots(): array {
-		$stored_slots = get_option(self::OPTION_NAME, array());
+	public function get_weekly_slots(string $calendar = 'immediate'): array {
+		$option_name  = 'media' === $calendar ? self::MEDIA_OPTION_NAME : self::OPTION_NAME;
+		$stored_slots = get_option($option_name, array());
 
 		return $this->sanitize_slots(is_array($stored_slots) ? $stored_slots : array());
 	}
@@ -87,7 +90,7 @@ final class Slot_Repository {
 	 * @param string $scope Target scope.
 	 * @return array<int,string>|\WP_Error
 	 */
-	public function add_slot(string $day_key, string $time, string $scope) {
+	public function add_slot(string $day_key, string $time, string $scope, string $calendar = 'immediate') {
 		$day_key = sanitize_key($day_key);
 		$scope   = sanitize_key($scope);
 		$time    = sanitize_text_field(wp_unslash($time));
@@ -98,10 +101,11 @@ final class Slot_Repository {
 		}
 
 		if (! $this->is_valid_time($time)) {
-			return new \WP_Error('wp_queuepress_invalid_time', __('Invalid time.', 'wp-queuepress'));
+			return new \WP_Error('wp_queuepress_invalid_time', __('Invalid time. Slots must be at or after 05:00.', 'wp-queuepress'));
 		}
 
-		$slots    = $this->get_weekly_slots();
+		$calendar = 'media' === $calendar ? 'media' : 'immediate';
+		$slots    = $this->get_weekly_slots($calendar);
 		$weekdays = $this->get_weekdays();
 
 		foreach ($days as $day) {
@@ -123,7 +127,7 @@ final class Slot_Repository {
 			sort($slots[$day], SORT_STRING);
 		}
 
-		update_option(self::OPTION_NAME, $slots);
+		update_option('media' === $calendar ? self::MEDIA_OPTION_NAME : self::OPTION_NAME, $slots);
 
 		return $days;
 	}
@@ -135,7 +139,7 @@ final class Slot_Repository {
 	 * @param string $time Slot time in HH:MM format.
 	 * @return array<int,string>|\WP_Error
 	 */
-	public function delete_slot(string $day_key, string $time) {
+	public function delete_slot(string $day_key, string $time, string $calendar = 'immediate') {
 		$day_key = sanitize_key($day_key);
 		$time    = sanitize_text_field(wp_unslash($time));
 
@@ -143,11 +147,12 @@ final class Slot_Repository {
 			return new \WP_Error('wp_queuepress_invalid_day', __('Invalid day.', 'wp-queuepress'));
 		}
 
-		if (! $this->is_valid_time($time)) {
-			return new \WP_Error('wp_queuepress_invalid_time', __('Invalid time.', 'wp-queuepress'));
+		if (! $this->is_valid_time_format($time)) {
+			return new \WP_Error('wp_queuepress_invalid_time', __('Invalid time. Slots must be at or after 05:00.', 'wp-queuepress'));
 		}
 
-		$slots          = $this->get_weekly_slots();
+		$calendar        = 'media' === $calendar ? 'media' : 'immediate';
+		$slots           = $this->get_weekly_slots($calendar);
 		$slots[$day_key] = array_values(
 			array_filter(
 				$slots[$day_key] ?? array(),
@@ -157,7 +162,7 @@ final class Slot_Repository {
 			)
 		);
 
-		update_option(self::OPTION_NAME, $slots);
+		update_option('media' === $calendar ? self::MEDIA_OPTION_NAME : self::OPTION_NAME, $slots);
 
 		return array($day_key);
 	}
@@ -169,6 +174,11 @@ final class Slot_Repository {
 	 * @return bool
 	 */
 	public function is_valid_time(string $time): bool {
+		return $this->is_valid_time_format($time) && $time >= self::MINIMUM_SLOT_TIME;
+	}
+
+	/** Checks time syntax without applying the current minimum-slot policy. */
+	public function is_valid_time_format(string $time): bool {
 		return 1 === preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $time);
 	}
 
@@ -188,7 +198,8 @@ final class Slot_Repository {
 
 		foreach ($raw_times as $raw_time) {
 			// Accept only 24-hour clock values. Invalid input is ignored.
-			if (! preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $raw_time)) {
+			// Preserve legacy values so the admin can see and remove them safely.
+			if (! $this->is_valid_time_format($raw_time)) {
 				continue;
 			}
 

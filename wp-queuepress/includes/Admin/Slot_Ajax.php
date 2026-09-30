@@ -102,7 +102,8 @@ final class Slot_Ajax {
 		);
 
 		try {
-			$plan = $rebuilder->compute_and_persist_plan();
+			$calendar = isset($_POST['calendar']) && 'media' === sanitize_key(wp_unslash($_POST['calendar'])) ? 'media' : 'immediate';
+			$plan = $rebuilder->compute_and_persist_plan($calendar);
 			// Enrich preview items with title and localized display strings.
 			$preview_raw = array_slice($plan['plan'], 0, 50);
 			$preview = array();
@@ -151,7 +152,7 @@ final class Slot_Ajax {
 	}
 
 	/**
-	 * Applies a previously computed rebuild plan persisted in option `qps_pending_rebuild`.
+	 * Applies the previously computed plan for the selected calendar.
 	 *
 	 * Iterates the plan sequentially and updates scheduled posts to the precomputed new dates.
 	 * Continues on errors and returns a list of conflicts.
@@ -161,7 +162,8 @@ final class Slot_Ajax {
 	public function apply_rebuild(): void {
 		$this->verify_request();
 
-		$pending = get_option('qps_pending_rebuild', null);
+		$calendar = isset($_POST['calendar']) && 'media' === sanitize_key(wp_unslash($_POST['calendar'])) ? 'media' : 'immediate';
+		$pending = get_option('qps_pending_rebuild_' . $calendar, null);
 		if (empty($pending) || ! is_array($pending) || empty($pending['plan']) || ! is_array($pending['plan'])) {
 			wp_send_json_error(array('message' => __('No pending rebuild plan found.', 'wp-queuepress')), 400);
 		}
@@ -175,7 +177,7 @@ final class Slot_Ajax {
 		$results   = $rebuilder->apply_plan($pending['plan']);
 
 		// Remove pending plan after attempting the application.
-		delete_option('qps_pending_rebuild');
+		delete_option('qps_pending_rebuild_' . $calendar);
 
 		wp_send_json_success($results);
 	}
@@ -188,6 +190,7 @@ final class Slot_Ajax {
 	public function save_weekly_slots(): void {
 		$this->verify_request();
 
+		$calendar = isset($_POST['calendar']) && 'media' === sanitize_key(wp_unslash($_POST['calendar'])) ? 'media' : 'immediate';
 		$raw = isset($_POST['slots']) ? wp_unslash($_POST['slots']) : '';
 		if (! $raw) {
 			wp_send_json_error(array('message' => __('Missing slots payload.', 'wp-queuepress')), 400);
@@ -198,51 +201,62 @@ final class Slot_Ajax {
 			wp_send_json_error(array('message' => __('Invalid slots payload.', 'wp-queuepress')), 400);
 		}
 
-		// Normalize and sanitize according to repository weekdays.
+		// Accept the combined calendar payload; legacy single-calendar payloads remain supported.
 		$weekdays = array_keys($this->slot_repository->get_weekdays());
+		$combined_payload = isset($data['immediate'], $data['media']);
 		$sanitized = array();
-
-		foreach ($weekdays as $weekday) {
-			$sanitized[$weekday] = array();
-			if (isset($data[$weekday]) && is_array($data[$weekday])) {
-				foreach ($data[$weekday] as $time) {
+		foreach ($combined_payload ? array('immediate', 'media') : array($calendar) as $target_calendar) {
+			$calendar_data = $combined_payload ? $data[$target_calendar] : $data;
+			if (! is_array($calendar_data)) {
+				wp_send_json_error(array('message' => __('Invalid slots payload.', 'wp-queuepress')), 400);
+			}
+			$sanitized[$target_calendar] = array();
+			foreach ($weekdays as $weekday) {
+				$sanitized[$target_calendar][$weekday] = array();
+				$times = isset($calendar_data[$weekday]) && is_array($calendar_data[$weekday]) ? $calendar_data[$weekday] : array();
+				foreach ($times as $time) {
 					$time = sanitize_text_field((string) $time);
-					if ($this->slot_repository->is_valid_time($time)) {
-						$sanitized[$weekday][] = $time;
+					if (! $this->slot_repository->is_valid_time_format($time)) {
+						wp_send_json_error(array('message' => __('Invalid time format.', 'wp-queuepress')), 400);
 					}
+					if (! $this->slot_repository->is_valid_time($time)) {
+						wp_send_json_error(array('message' => __('Publishing slots must be at or after 05:00 (WordPress site timezone).', 'wp-queuepress')), 400);
+					}
+					$sanitized[$target_calendar][$weekday][] = $time;
 				}
-				$sanitized[$weekday] = array_values(array_unique($sanitized[$weekday]));
-				sort($sanitized[$weekday], SORT_STRING);
+				$sanitized[$target_calendar][$weekday] = array_values(array_unique($sanitized[$target_calendar][$weekday]));
+				sort($sanitized[$target_calendar][$weekday], SORT_STRING);
 			}
 		}
 
-		update_option(Slot_Repository::OPTION_NAME, $sanitized);
+		foreach ($sanitized as $target_calendar => $slots) {
+			update_option('media' === $target_calendar ? Slot_Repository::MEDIA_OPTION_NAME : Slot_Repository::OPTION_NAME, $slots);
+		}
 
-		// Return refreshed rendered HTML for each weekday using current availability.
-		$days = $this->get_day_payloads(array_keys($sanitized));
-		$future_count = (int) wp_count_posts()->future;
+		// Refresh only configured slot markup; post occupancy is not part of this screen.
+		$days = $this->get_day_payloads($weekdays);
 
 		wp_send_json_success(
 			array(
 				'message' => __('Slots saved.', 'wp-queuepress'),
 				'days'    => $days,
-				'scheduled_posts_count' => $future_count,
 			)
 		);
 	}
 
 	/**
-	 * Adds a slot and returns updated availability for affected days.
+	 * Adds a slot and returns configured-slot markup for affected days.
 	 *
 	 * @return void
 	 */
 	public function add_slot(): void {
 		$this->verify_request();
 
+		$calendar = isset($_POST['calendar']) && 'media' === sanitize_key(wp_unslash($_POST['calendar'])) ? 'media' : 'immediate';
 		$day    = isset($_POST['day']) ? sanitize_key(wp_unslash($_POST['day'])) : '';
 		$time   = isset($_POST['time']) ? sanitize_text_field(wp_unslash($_POST['time'])) : '';
 		$scope  = isset($_POST['scope']) ? sanitize_key(wp_unslash($_POST['scope'])) : 'day';
-		$result = $this->slot_repository->add_slot($day, $time, $scope);
+		$result = $this->slot_repository->add_slot($day, $time, $scope, $calendar);
 
 		if (is_wp_error($result)) {
 			wp_send_json_error(array('message' => $result->get_error_message()), 400);
@@ -257,16 +271,17 @@ final class Slot_Ajax {
 	}
 
 	/**
-	 * Deletes a slot and returns updated availability for the affected day.
+	 * Deletes a slot and returns configured-slot markup for the affected day.
 	 *
 	 * @return void
 	 */
 	public function delete_slot(): void {
 		$this->verify_request();
 
+		$calendar = isset($_POST['calendar']) && 'media' === sanitize_key(wp_unslash($_POST['calendar'])) ? 'media' : 'immediate';
 		$day    = isset($_POST['day']) ? sanitize_key(wp_unslash($_POST['day'])) : '';
 		$time   = isset($_POST['time']) ? sanitize_text_field(wp_unslash($_POST['time'])) : '';
-		$result = $this->slot_repository->delete_slot($day, $time);
+		$result = $this->slot_repository->delete_slot($day, $time, $calendar);
 
 		if (is_wp_error($result)) {
 			wp_send_json_error(array('message' => $result->get_error_message()), 400);
@@ -300,104 +315,26 @@ final class Slot_Ajax {
 	 * @return array<string,array<string,string>>
 	 */
 	private function get_day_payloads(array $day_keys): array {
-		$availability = $this->get_current_week_availability();
-		$payload      = array();
+		$calendar_slots = array(
+			'immediate' => $this->slot_repository->get_weekly_slots('immediate'),
+			'media'     => $this->slot_repository->get_weekly_slots('media'),
+		);
+		$payload = array();
 
 		foreach ($day_keys as $day_key) {
-			$day_date           = $this->get_date_for_day($day_key);
-			$payload[$day_key] = array(
-				'html' => Calendar_Page::render_slot_list_html($availability[$day_date] ?? array(), $day_key),
-			);
+			$slots = array();
+			foreach ($calendar_slots as $calendar => $days) {
+				foreach ($days[$day_key] ?? array() as $time) {
+					$slots[] = array('time' => $time, 'calendar' => $calendar);
+				}
+			}
+			usort($slots, static function (array $left, array $right): int {
+				return ($left['time'] <=> $right['time']) ?: ($left['calendar'] <=> $right['calendar']);
+			});
+			$payload[$day_key] = array('html' => Calendar_Page::render_slot_list_html($slots, $day_key));
 		}
 
 		return $payload;
 	}
 
-	/**
-	 * Gets availability for the currently displayed week.
-	 *
-	 * @return array<string,array<int,array<string,mixed>>>
-	 */
-	private function get_current_week_availability(): array {
-		$timezone   = wp_timezone();
-		$week_start = $this->get_requested_week_start($timezone);
-		$week_end   = $week_start->modify('+6 days')->setTime(23, 59, 59);
-		$posts      = array_merge(
-			$this->post_query->get_posts_between('future', $week_start, $week_end),
-			$this->post_query->get_posts_between('publish', $week_start, $week_end)
-		);
-
-		return $this->schedule_calculator->get_week_availability($week_start, $week_end, $posts);
-	}
-
-	/**
-	 * Gets the displayed date for a weekday key.
-	 *
-	 * @param string $day_key Weekday key.
-	 * @return string
-	 */
-	private function get_date_for_day(string $day_key): string {
-		$week_start = $this->get_requested_week_start(wp_timezone());
-		$days       = $this->get_ordered_weekdays();
-		$offset     = array_search($day_key, $days, true);
-
-		if (false === $offset) {
-			return $week_start->format('Y-m-d');
-		}
-
-		return $week_start->modify('+' . $offset . ' days')->format('Y-m-d');
-	}
-
-	/**
-	 * Reads the displayed week from AJAX payload.
-	 *
-	 * @param \DateTimeZone $timezone Site timezone.
-	 * @return DateTimeImmutable
-	 */
-	private function get_requested_week_start(\DateTimeZone $timezone): DateTimeImmutable {
-		$requested_week = isset($_POST['week_start']) ? sanitize_text_field(wp_unslash($_POST['week_start'])) : '';
-
-		if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $requested_week)) {
-			$date = DateTimeImmutable::createFromFormat('!Y-m-d', $requested_week, $timezone);
-
-			if ($date instanceof DateTimeImmutable) {
-				return $this->get_start_of_week($date);
-			}
-		}
-
-		return $this->get_start_of_week(new DateTimeImmutable('now', $timezone));
-	}
-
-	/**
-	 * Returns weekday keys in the configured calendar order.
-	 *
-	 * @return array<int,string>
-	 */
-	private function get_ordered_weekdays(): array {
-		$days = array_keys($this->slot_repository->get_weekdays());
-
-		if ($this->preferences->starts_on_sunday()) {
-			array_unshift($days, (string) array_pop($days));
-		}
-
-		return $days;
-	}
-
-	/**
-	 * Applies the configured week-start preference.
-	 *
-	 * @param DateTimeImmutable $date Date inside the displayed week.
-	 * @return DateTimeImmutable
-	 */
-	private function get_start_of_week(DateTimeImmutable $date): DateTimeImmutable {
-		if ($this->preferences->starts_on_sunday()) {
-			// If already Sunday, use today; otherwise get last Sunday.
-			$modifier = '0' === $date->format('w') ? 'today' : 'last sunday';
-		} else {
-			// If already Monday, use today; otherwise get last Monday.
-			$modifier = '1' === $date->format('N') ? 'today' : 'last monday';
-		}
-
-		return $date->modify($modifier)->setTime(0, 0, 0);
-	}
 }

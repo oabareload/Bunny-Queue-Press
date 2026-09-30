@@ -1,6 +1,6 @@
 # Bunny Queue Press
 
-Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It provides a compact Pipeline overview, recurring weekly slot configuration in Calendar Settings, and an Add to Queue workflow that keeps Gutenberg autosave-safe while assigning future schedule dates. Since 2.0.0 it also integrates with Buffer for social media publishing to Instagram, X/Twitter, and Threads.
+Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. Version 2.7.4 presents recurring Immediate and Media slots without week navigation, offers per-calendar rebuild previews on the Calendar screen, and shows editorial Drafts, Future, and Published posts in separate Pipeline columns. Relevance badges use consistent Immediate, Media, and Fill colors; posts without valid relevance remain unclassified. Buffer jobs use `shareNow` for Immediate posts and `addToQueue` for Media and Fill posts, leaving Buffer to choose its next available queue time. QueuePress assigns and rebuilds native WordPress scheduled posts; WordPress remains responsible for publishing them. The plugin also provides an optional Buffer integration.
 
 ## Plugin metadata
 
@@ -9,7 +9,7 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. It
 1. Copy the `wp-queuepress` folder into `wp-content/plugins/`.
 2. Activate **Bunny Queue Press** from the WordPress Plugins screen.
 3. Open **Bunny Queue Press > Pipeline** to review editorial status.
-4. Open **Bunny Queue Press > Calendar Settings** to configure weekly recurring slots.
+4. Open **Bunny Queue Press > Calendar** to configure Immediate and Media slots together in one weekly view. Slots before 05:00 in the WordPress site timezone are not allowed; daily Fill maintenance runs at 04:00.
 5. Use the Gutenberg editor QueuePress panel to schedule drafts safely.
 6. Open **Bunny Queue Press > Buffer Settings** to connect your Buffer account and configure per-channel publishing options.
 
@@ -61,6 +61,7 @@ Bunny-Queue-Press/
     │   │   ├── Queue_Assigner.php
     │   │   ├── Queue_Commit_Handler.php
     │   │   ├── Queue_Rebuilder.php
+    │   │   ├── Media_Fill_Maintenance.php
     │   │   ├── Schedule_Calculator.php
     │   │   └── Slot_Repository.php
     │   ├── Settings/

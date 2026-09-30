@@ -33,11 +33,13 @@ final class Queue_Rebuilder {
 
     /**
      * Compute a deterministic rebuild plan for all scheduled (future) posts.
-     * Does not modify posts — compute-only. Persists plan to option `qps_pending_rebuild`.
+     * Does not modify posts — compute-only. Persists a plan per calendar.
      *
      * @return array Plan structure.
      */
-    public function compute_and_persist_plan(): array {
+    public function compute_and_persist_plan(string $calendar = 'immediate'): array {
+        $calendar = 'media' === $calendar ? 'media' : 'immediate';
+        $relevances = 'media' === $calendar ? array('media', 'fill') : array('immediate');
         $timezone = wp_timezone();
         $now = new DateTimeImmutable('now', $timezone);
 
@@ -46,6 +48,7 @@ final class Queue_Rebuilder {
             array(
                 'post_type'           => 'post',
                 'post_status'         => 'future',
+                'meta_query'          => array(array('key' => '_wp_queuepress_relevance', 'value' => $relevances, 'compare' => 'IN')),
                 'posts_per_page'      => -1,
                 'orderby'             => array('date' => 'ASC', 'ID' => 'ASC'),
                 'ignore_sticky_posts' => true,
@@ -65,12 +68,14 @@ final class Queue_Rebuilder {
         // Collect available slots across SEARCH_WEEKS weeks.
         $available_slots = array();
         $week_start = $this->get_start_of_week($now);
+        $search_end = $week_start->modify('+' . (self::SEARCH_WEEKS * 7 - 1) . ' days')->setTime(23, 59, 59);
+        $published_posts = $this->post_query->get_posts_between('publish', $week_start, $search_end, $relevances, -1);
 
         for ($week = 0; $week < self::SEARCH_WEEKS; $week++) {
             $start = $week_start->modify('+' . $week . ' weeks');
             $end = $start->modify('+6 days')->setTime(23, 59, 59);
 
-            $free = $this->schedule_calculator->get_free_slots($start, $end, $occupied_posts);
+            $free = $this->schedule_calculator->get_free_slots($start, $end, array_merge($occupied_posts, $published_posts), $calendar);
 
             foreach ($free as $slot) {
                 $slot_dt = new DateTimeImmutable($slot['date'] . ' ' . $slot['time'], $timezone);
@@ -108,6 +113,7 @@ final class Queue_Rebuilder {
         }
 
         $plan = array(
+            'calendar'   => $calendar,
             'version'    => '2.1.1',
             'created_at' => (new DateTimeImmutable('now', wp_timezone()))->format(DATE_ATOM),
             'total'      => count($plan_items),
@@ -116,7 +122,7 @@ final class Queue_Rebuilder {
             'conflicts'  => $conflicts,
         );
 
-        update_option('qps_pending_rebuild', $plan);
+        update_option('qps_pending_rebuild_' . $calendar, $plan);
 
         return $plan;
     }
@@ -133,7 +139,9 @@ final class Queue_Rebuilder {
      * @param int $post_id The post being queued (still draft at this point).
      * @return array<int,array<string,mixed>> Plan items: post_id, old_date, new_date.
      */
-    public function compute_add_first_preview(int $post_id): array {
+    public function compute_add_first_preview(int $post_id, string $relevance = 'media'): array {
+        $calendar = 'immediate' === $relevance ? 'immediate' : 'media';
+        $relevances = 'immediate' === $calendar ? array('immediate') : array('media', 'fill');
         $new_post = get_post($post_id);
 
         if (! $new_post instanceof WP_Post) {
@@ -146,6 +154,7 @@ final class Queue_Rebuilder {
             array(
                 'post_type'              => $new_post->post_type,
                 'post_status'            => 'future',
+                'meta_query'             => array(array('key' => '_wp_queuepress_relevance', 'value' => $relevances, 'compare' => 'IN')),
                 'posts_per_page'         => -1,
                 'orderby'                => array('date' => 'ASC', 'ID' => 'ASC'),
                 'ignore_sticky_posts'    => true,
@@ -166,7 +175,7 @@ final class Queue_Rebuilder {
 
         // Total slots needed: 1 (new post) + all existing scheduled posts.
         $total = 1 + count($scheduled_posts);
-        $slots = $this->get_future_slots_for_plan($total);
+        $slots = $this->get_future_slots_for_plan($total, $calendar);
 
         if (count($slots) < $total) {
             return array();
@@ -198,9 +207,8 @@ final class Queue_Rebuilder {
     /**
      * Computes a swap plan between two future posts.
      *
-     * Exchanges the post_date of the two posts. The result is a 2-item plan
-     * in the exact shape consumed by apply_plan(): no row is added or removed
-     * from the queue, only two timestamps are permuted.
+     * Exchanges their queue positions, then compacts that calendar into its
+     * configured slots. Media and Fill share one movement scope.
      *
      * The plan is compute-only; nothing is written to the database. No call
      * to wp_update_post is made here.
@@ -248,21 +256,55 @@ final class Queue_Rebuilder {
             return array();
         }
 
-        $a_old = (string) $post_a->post_date;
-        $b_old = (string) $post_b->post_date;
+        $relevance_a = (string) get_post_meta($post_a_id, '_wp_queuepress_relevance', true);
+        $relevance_b = (string) get_post_meta($post_b_id, '_wp_queuepress_relevance', true);
+        if (! in_array($relevance_a, array('immediate', 'media', 'fill'), true)
+            || ! in_array($relevance_b, array('immediate', 'media', 'fill'), true)
+            || ('immediate' === $relevance_a) !== ('immediate' === $relevance_b)) {
+            return array();
+        }
 
-        return array(
+        $calendar = 'immediate' === $relevance_a ? 'immediate' : 'media';
+        $relevances = 'immediate' === $calendar ? array('immediate') : array('media', 'fill');
+        $query = new \WP_Query(
             array(
-                'post_id'  => (int) $post_a->ID,
-                'old_date' => $a_old,
-                'new_date' => $b_old,
-            ),
-            array(
-                'post_id'  => (int) $post_b->ID,
-                'old_date' => $b_old,
-                'new_date' => $a_old,
-            ),
+                'post_type' => $post_a->post_type,
+                'post_status' => 'future',
+                'posts_per_page' => -1,
+                'orderby' => array('date' => 'ASC', 'ID' => 'ASC'),
+                'meta_query' => array(array('key' => '_wp_queuepress_relevance', 'value' => $relevances, 'compare' => 'IN')),
+                'ignore_sticky_posts' => true,
+                'no_found_rows' => true,
+                'update_post_meta_cache' => false,
+                'update_post_term_cache' => false,
+            )
         );
+        $posts = $query->posts;
+        $source_index = null;
+        $target_index = null;
+        foreach ($posts as $index => $post) {
+            if ((int) $post->ID === $post_a_id) { $source_index = $index; }
+            if ((int) $post->ID === $post_b_id) { $target_index = $index; }
+        }
+        if (null === $source_index || null === $target_index) {
+            return array();
+        }
+        $posts[$source_index] = $post_b;
+        $posts[$target_index] = $post_a;
+        $slots = $this->get_future_slots_for_plan(count($posts), $calendar);
+        if (count($slots) < count($posts)) {
+            return array();
+        }
+        $plan = array();
+        foreach ($posts as $post) {
+            $slot = array_shift($slots);
+            $plan[] = array(
+                'post_id' => (int) $post->ID,
+                'old_date' => (string) $post->post_date,
+                'new_date' => $slot->format(DATE_ATOM),
+            );
+        }
+        return $plan;
     }
 
     /**
@@ -278,7 +320,9 @@ final class Queue_Rebuilder {
      * @param int $post_id Newly scheduled post ID.
      * @return array<int,array<string,mixed>> Rebuild plan items.
      */
-    public function compute_add_first_plan(int $post_id): array {
+    public function compute_add_first_plan(int $post_id, string $relevance = 'media'): array {
+        $calendar = 'immediate' === $relevance ? 'immediate' : 'media';
+        $relevances = 'immediate' === $calendar ? array('immediate') : array('media', 'fill');
         // Flush object cache so we read the actual current DB state.
         clean_post_cache($post_id);
         $new_post = get_post($post_id);
@@ -292,6 +336,7 @@ final class Queue_Rebuilder {
             array(
                 'post_type'              => $new_post->post_type,
                 'post_status'            => 'future',
+                'meta_query'             => array(array('key' => '_wp_queuepress_relevance', 'value' => $relevances, 'compare' => 'IN')),
                 'posts_per_page'         => -1,
                 'orderby'                => array('date' => 'ASC', 'ID' => 'ASC'),
                 'ignore_sticky_posts'    => true,
@@ -315,7 +360,7 @@ final class Queue_Rebuilder {
         $queue_posts = array_merge(array($new_post), $scheduled_posts);
 
         // Get exactly as many unique, non-overlapping future slots as we need.
-        $slots = $this->get_future_slots_for_plan(count($queue_posts));
+        $slots = $this->get_future_slots_for_plan(count($queue_posts), $calendar);
 
         if (count($slots) < count($queue_posts)) {
             return array();
@@ -366,6 +411,11 @@ final class Queue_Rebuilder {
             $post = get_post($post_id);
             if (! $post instanceof WP_Post) {
                 $results['conflicts'][] = array('post_id' => $post_id, 'message' => 'Post not found');
+                continue;
+            }
+
+            if (! in_array((string) get_post_meta($post_id, '_wp_queuepress_relevance', true), array('immediate', 'media', 'fill'), true)) {
+                $results['conflicts'][] = array('post_id' => $post_id, 'message' => 'Post has no valid QueuePress relevance.');
                 continue;
             }
 
@@ -467,17 +517,20 @@ final class Queue_Rebuilder {
      * @param int $limit Number of slots needed.
      * @return array<int,DateTimeImmutable>
      */
-    private function get_future_slots_for_plan(int $limit): array {
+    private function get_future_slots_for_plan(int $limit, string $calendar = 'immediate'): array {
         $timezone       = wp_timezone();
         $now            = new DateTimeImmutable('now', $timezone);
         $week_start     = $this->get_start_of_week($now);
         $occupied_posts = array((object) array('post_date' => '1970-01-01 00:00:00', 'ID' => 0));
         $slots          = array();
+        $relevances     = 'immediate' === $calendar ? array('immediate') : array('media', 'fill');
+        $search_end     = $week_start->modify('+' . (self::SEARCH_WEEKS * 7 - 1) . ' days')->setTime(23, 59, 59);
+        $published      = $this->post_query->get_posts_between('publish', $week_start, $search_end, $relevances, -1);
 
         for ($week = 0; $week < self::SEARCH_WEEKS && count($slots) < $limit; $week++) {
             $start = $week_start->modify('+' . $week . ' weeks');
             $end   = $start->modify('+6 days')->setTime(23, 59, 59);
-            $free  = $this->schedule_calculator->get_free_slots($start, $end, $occupied_posts);
+            $free  = $this->schedule_calculator->get_free_slots($start, $end, array_merge($occupied_posts, $published), $calendar);
 
             foreach ($free as $slot) {
                 $slot_dt = new DateTimeImmutable($slot['date'] . ' ' . $slot['time'], $timezone);
@@ -512,7 +565,7 @@ final class Queue_Rebuilder {
      * @param int $limit Number of slots needed.
      * @return array<int,DateTimeImmutable>
      */
-    private function get_future_slots(int $limit): array {
+    private function get_future_slots(int $limit, string $calendar = 'immediate'): array {
         $timezone       = wp_timezone();
         $now            = new DateTimeImmutable('now', $timezone);
         $week_start     = $this->get_start_of_week($now);
@@ -522,7 +575,7 @@ final class Queue_Rebuilder {
         for ($week = 0; $week < self::SEARCH_WEEKS && count($slots) < $limit; $week++) {
             $start = $week_start->modify('+' . $week . ' weeks');
             $end   = $start->modify('+6 days')->setTime(23, 59, 59);
-            $free  = $this->schedule_calculator->get_free_slots($start, $end, $occupied_posts);
+            $free  = $this->schedule_calculator->get_free_slots($start, $end, $occupied_posts, $calendar);
 
             foreach ($free as $slot) {
                 $slot_dt = new DateTimeImmutable($slot['date'] . ' ' . $slot['time'], $timezone);

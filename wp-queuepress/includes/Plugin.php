@@ -22,6 +22,7 @@ use QueuePostScheduler\Schedule\Post_Query;
 use QueuePostScheduler\Rest\Queue_Controller;
 use QueuePostScheduler\Schedule\Queue_Assigner;
 use QueuePostScheduler\Schedule\Queue_Commit_Handler;
+use QueuePostScheduler\Schedule\Media_Fill_Maintenance;
 use QueuePostScheduler\Schedule\Queue_Rebuilder;
 use QueuePostScheduler\Schedule\Schedule_Calculator;
 use QueuePostScheduler\Schedule\Slot_Repository;
@@ -78,7 +79,7 @@ final class Plugin {
 		$queue_rebuilder     = new Queue_Rebuilder($slot_repository, $post_query, $schedule_calculator, $preferences);
 
 		$settings_page = new Settings_Page($slot_repository, $preferences);
-		$calendar_page = new Calendar_Page($slot_repository, $schedule_calculator, $preferences);
+		$calendar_page = new Calendar_Page($slot_repository, $preferences);
 		$pipeline_page = new Pipeline_Page($post_query, $preferences);
 		$buffer_page   = new Buffer_Page();
 		$lab_page      = new Lab_Page();
@@ -89,6 +90,7 @@ final class Plugin {
 		$editor_assets = new Editor_Assets();
 		$queue_api     = new Queue_Controller($queue_assigner, $queue_rebuilder);
 		$queue_commit  = new Queue_Commit_Handler($queue_assigner, $queue_rebuilder, $preferences);
+		$media_fill_maintenance = new Media_Fill_Maintenance($post_query, $queue_rebuilder);
 
 		// Run once-per-upgrade schema migrations.
 		( new \QueuePostScheduler\Buffer\Channel_Config() )->migrate_legacy_config();
@@ -112,6 +114,7 @@ final class Plugin {
 		$editor_assets->register();
 		$queue_api->register();
 		$queue_commit->register();
+		$media_fill_maintenance->register();
 	}
 
 	/**
@@ -134,6 +137,23 @@ final class Plugin {
 				},
 			)
 		);
+		register_post_meta(
+			'post',
+			'_wp_queuepress_relevance',
+			array(
+				'type' => 'string',
+				'single' => true,
+				'show_in_rest' => true,
+				'sanitize_callback' => array($this, 'sanitize_relevance'),
+				'auth_callback' => static function (): bool { return current_user_can('edit_posts'); },
+			)
+		);
+	}
+
+	/** Restricts persisted queue classifications to the supported values. */
+	public function sanitize_relevance($value): string {
+		$value = sanitize_key((string) $value);
+		return in_array($value, array('immediate', 'media', 'fill'), true) ? $value : '';
 	}
 
 	/**

@@ -127,16 +127,13 @@ final class Queue_Commit_Handler {
 		// future -> draft: controlled cleanup to prevent obsolete state persistence.
 		if ('future' === $old_status && 'draft' === $new_status) {
 			delete_post_meta((int) $post->ID, self::META_KEY);
+			delete_post_meta((int) $post->ID, '_wp_queuepress_relevance');
 			clean_post_cache((int) $post->ID);
 			return;
 		}
 
-		// Queue intent is a draft-only, one-time signal: only a genuine
-		// draft -> future transition may commit a plan. Any other path
-		// (future -> future resave, publish -> publish resave, or a
-		// publish -> future transition however it might occur) must not
-		// act on the intent, and must not let it persist either.
-		if ('future' !== $new_status || 'draft' !== $old_status) {
+		// A queue intent commits only on an actual transition into future.
+		if ('future' !== $new_status || 'future' === $old_status) {
 			if (in_array($new_status, array('publish', 'future'), true)) {
 				delete_post_meta((int) $post->ID, self::META_KEY);
 			}
@@ -148,6 +145,11 @@ final class Queue_Commit_Handler {
 		}
 
 		$post_id = (int) $post->ID;
+		$relevance = (string) get_post_meta($post_id, '_wp_queuepress_relevance', true);
+		if (! in_array($relevance, array('immediate', 'media', 'fill'), true)) {
+			delete_post_meta($post_id, self::META_KEY);
+			return;
+		}
 		$mode    = (string) get_post_meta($post_id, self::META_KEY, true);
 
 		if (! in_array($mode, array('add_to_queue', 'add_first'), true)) {
@@ -161,12 +163,12 @@ final class Queue_Commit_Handler {
 
 		try {
 			if ('add_first' === $mode) {
-				$plan = $this->queue_rebuilder->compute_add_first_plan($post_id);
+				$plan = $this->queue_rebuilder->compute_add_first_plan($post_id, $relevance);
 				error_log('[QueuePress] add_first plan for post ' . $post_id . ': ' . wp_json_encode($plan));
 				$result = $this->queue_rebuilder->apply_plan($plan);
 				error_log('[QueuePress] apply_plan result: ' . wp_json_encode($result));
 			} else {
-				$this->commit_add_to_queue($post_id);
+				$this->commit_add_to_queue($post_id, $relevance);
 			}
 		} finally {
 			$this->is_applying = false;
@@ -179,8 +181,8 @@ final class Queue_Commit_Handler {
 	 * @param int $post_id Post ID.
 	 * @return void
 	 */
-	private function commit_add_to_queue(int $post_id): void {
-		$slot = $this->queue_assigner->find_next_slot($post_id);
+	private function commit_add_to_queue(int $post_id, string $relevance): void {
+		$slot = $this->queue_assigner->find_next_slot($post_id, $relevance);
 
 		if (null === $slot) {
 			return;

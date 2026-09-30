@@ -2,6 +2,21 @@
  * Admin styles for Bunny Queue Press.
  */
 
+:root {
+	--qps-immediate: #c0266d;
+	--qps-immediate-bg: #fce7f3;
+	--qps-immediate-border: #f0a9cc;
+	--qps-immediate-text: #831843;
+	--qps-media: #7e22ce;
+	--qps-media-bg: #f3e8ff;
+	--qps-media-border: #d8b4fe;
+	--qps-media-text: #581c87;
+	--qps-fill: #c2410c;
+	--qps-fill-bg: #ffedd5;
+	--qps-fill-border: #fdba74;
+	--qps-fill-text: #9a3412;
+}
+
 .qps-wrap .description {
 	max-width: 760px;
 }
@@ -67,19 +82,6 @@
 	margin-top: 2px;
 }
 
-.qps-week-nav {
-	align-items: center;
-	background: #fff;
-	border: 1px solid #c3c4c7;
-	border-radius: 4px;
-	display: flex;
-	flex-wrap: wrap;
-	gap: 12px;
-	justify-content: space-between;
-	margin: 18px 0 16px;
-	padding: 12px;
-}
-
 .qps-global-slot-manager {
 	background: #fff;
 	border: 1px solid #c3c4c7;
@@ -99,37 +101,92 @@
 	margin-bottom: 0;
 }
 
-.qps-week-nav__label {
-	display: grid;
-	gap: 2px;
-}
-
-.qps-week-nav__label span {
-	color: #646970;
-	font-size: 12px;
-}
-
-.qps-week-nav__label strong {
-	color: #1d2327;
-	font-size: 14px;
-}
-
-.qps-week-nav__actions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-}
-
 .qps-calendar-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 	gap: 14px;
 }
 
+.qps-calendar-legend {
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0 0 12px;
+}
+
+.qps-calendar-legend__item {
+	border-left: 4px solid;
+	font-size: 12px;
+	font-weight: 600;
+	padding: 3px 8px;
+}
+
+.qps-calendar-legend__item--immediate { border-color: var(--qps-immediate); }
+.qps-calendar-legend__item--media { border-color: var(--qps-media); }
+
+.qps-slot--immediate {
+	background: var(--qps-immediate-bg);
+	border-left-color: var(--qps-immediate);
+}
+
+.qps-slot--media {
+	background: var(--qps-media-bg);
+	border-left-color: var(--qps-media);
+}
+
+.qps-slot--immediate .qps-badge,
+.qps-badge.qps-badge--immediate {
+	background: var(--qps-immediate-bg);
+	border-color: var(--qps-immediate-border);
+	color: var(--qps-immediate-text);
+}
+
+.qps-slot--media .qps-badge,
+.qps-badge.qps-badge--media {
+	background: var(--qps-media-bg);
+	border-color: var(--qps-media-border);
+	color: var(--qps-media-text);
+}
+
+.qps-badge.qps-badge--fill {
+	background: var(--qps-fill-bg);
+	border-color: var(--qps-fill-border);
+	color: var(--qps-fill-text);
+}
+
 .qps-pipeline-grid {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(250px, 1fr));
 	gap: 18px;
+}
+
+.qps-pipeline-grid--timeline {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.qps-pipeline-column--timeline {
+	max-width: 1100px;
+}
+
+.qps-pipeline-rebuild-tools {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	margin: 16px 0;
+	max-width: 1100px;
+	padding: 12px 16px;
+}
+
+.qps-pipeline-rebuild-tools h2 {
+	font-size: 14px;
+	margin: 0 0 8px;
+}
+
+.qps-pipeline-rebuild-tools .qps-rebuild-notice + .qps-rebuild-notice {
+	border-top: 1px solid #f0f0f1;
+	margin-top: 8px;
+	padding-top: 8px;
 }
 
 .qps-pipeline-column {
@@ -417,6 +474,11 @@
 	margin: 0;
 }
 
+.qps-slot-list {
+	list-style: none;
+	padding: 0;
+}
+
 .qps-slot,
 .qps-post-list li {
 	align-items: flex-start;
@@ -603,16 +665,6 @@
 }
 
 @media screen and (max-width: 782px) {
-	.qps-week-nav,
-	.qps-week-nav__actions {
-		align-items: stretch;
-		display: grid;
-	}
-
-	.qps-week-nav__actions .button {
-		text-align: center;
-	}
-
 	.qps-global-slot-header {
 		align-items: stretch;
 		display: grid;

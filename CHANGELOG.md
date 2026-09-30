@@ -1,5 +1,46 @@
 # Changelog
 
+### 2.7.4
+
+**Improved**
+- Buffer jobs now map QueuePress relevance to Buffer share mode: Immediate uses `shareNow`; Media and Fill use `addToQueue`.
+- Invalid or missing relevance follows the explicit non-Immediate `addToQueue` behavior without modifying relevance metadata or Buffer queue processing.
+
+### 2.7.3
+
+**Improved**
+- Removed week navigation from the recurring weekly Calendar configuration.
+- Pipeline Drafts, Future, and Published queries no longer filter posts by QueuePress relevance; Future includes all scheduled posts and Published keeps its existing recent-post date scope.
+- Matched Immediate, Media, and Fill badge colors to the corresponding Calendar identities using shared CSS color variables.
+
+### 2.7.1
+
+**Improved**
+- Combined Immediate and Media slot configuration in one weekly view. Slots are shown by local time and calendar color; same-time slots in both calendars remain visible as separate entries.
+- Removed post status, occupancy, post titles, and empty-slot placeholders from Calendar. Rendering and slot-save responses now use only stored slot options.
+- Restored the Pipeline's Drafts, Future, and Published columns; Future includes all WordPress scheduled posts without inventing relevance for unclassified posts.
+- Added distinct relevance colors for Immediate, Media, and Fill posts while leaving posts without valid relevance unclassified.
+- Preserved scheduled post movement within its existing calendar from the combined Pipeline.
+- Kept manual per-calendar rebuild preview controls on Calendar while keeping its initial slot-configuration view free of post queries and occupancy.
+
+**Unchanged**
+- Queue assignment and rebuild rules, native WordPress publishing, Buffer hooks, and daily Fill maintenance behavior remain unchanged.
+
+### 2.7.0
+
+**Added**
+- Added independent Immediate and Media weekly calendars. Same-time slots in the two calendars remain independent.
+- Added persistent relevance values `immediate`, `media`, and `fill`. Fill posts share Media slots and are promoted to Media by daily maintenance when their current local date arrives.
+- Added a single daily maintenance event at 04:00 in the WordPress site timezone. It promotes due Fill posts and rebuilds Media without publishing posts directly.
+- Added a 05:00 minimum slot time for both calendars, enforced in the UI and on the server.
+- Scoped Add First, Pipeline movement, rebuild previews, and rebuild application to the relevant calendar.
+
+**Compatibility and fixes**
+- Kept native WordPress `future` publication and the existing Buffer flow unchanged.
+- Preserved legacy configured slots earlier than 05:00 for visibility and deletion; those slots are inactive and excluded from scheduling.
+- Kept posts without valid QueuePress relevance outside its calendar, Pipeline scheduled lists, and rebuilds.
+- Scoped the post-save rebuild notice count to QueuePress posts in the selected calendar.
+
 ### 2.6.14
 
 **Fixed**

@@ -3,6 +3,7 @@
 
 	var __ = wp.i18n.__;
 	var RadioControl   = wp.components.RadioControl;
+	var SelectControl  = wp.components.SelectControl;
 	var Spinner        = wp.components.Spinner;
 	var Button         = wp.components.Button;
 	var Modal          = wp.components.Modal;
@@ -57,10 +58,14 @@
 
 		var storedMode  = (meta && meta._wp_queuepress_queue_mode) ? meta._wp_queuepress_queue_mode : '';
 		var initialMode = storedMode || 'none';
+		var initialRelevance = meta && meta._wp_queuepress_relevance ? meta._wp_queuepress_relevance : 'media';
 
 		var modeRes     = useState(initialMode);
 		var mode        = modeRes[0];
 		var setMode     = modeRes[1];
+		var relevanceRes = useState(initialRelevance);
+		var relevance = relevanceRes[0];
+		var setRelevance = relevanceRes[1];
 
 		var loadRes     = useState(false);
 		var isLoading   = loadRes[0];
@@ -104,9 +109,10 @@
 		useEffect(function () {
 			if ('draft' !== postStatus) { return; }
 			if (postId && 'none' !== mode && null === slotInfo && !isLoading) {
+				setQueueMeta(mode, relevance);
 				setIsLoading(true);
 				apiFetch({
-					path: '/wp-queuepress/v1/posts/' + postId + '/next-slot?mode=' + mode,
+				path: '/wp-queuepress/v1/posts/' + postId + '/next-slot?mode=' + mode + '&relevance=' + relevance,
 					method: 'GET'
 				}).then(function (response) {
 					setSlotInfo({ date: response.date, time: response.time, iso: response.iso });
@@ -127,7 +133,7 @@
 					setIsLoading(false);
 				});
 			}
-		}, [postId, mode, slotInfo, isLoading]);
+		}, [postId, mode, relevance, slotInfo, isLoading]);
 
 		// ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -139,12 +145,14 @@
 			}) + ' at ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 		}
 
-		function setQueueMeta(nextMode) {
+		function setQueueMeta(nextMode, nextRelevance) {
 			var nextMeta = Object.assign({}, meta);
 			if ('none' === nextMode) {
 				delete nextMeta._wp_queuepress_queue_mode;
+				delete nextMeta._wp_queuepress_relevance;
 			} else {
 				nextMeta._wp_queuepress_queue_mode = nextMode;
+				nextMeta._wp_queuepress_relevance = nextRelevance || relevance;
 			}
 			editPost({ meta: nextMeta });
 		}
@@ -166,7 +174,7 @@
 			setAddFirstPreview(null);
 			setShowModal(false);
 			setErrorMessage('');
-			setQueueMeta(nextMode);
+			setQueueMeta(nextMode, relevance);
 
 			if ('none' === nextMode) {
 				setIsLoading(true);
@@ -180,7 +188,7 @@
 			setIsLoading(true);
 
 			apiFetch({
-				path: '/wp-queuepress/v1/posts/' + postId + '/next-slot?mode=' + nextMode,
+				path: '/wp-queuepress/v1/posts/' + postId + '/next-slot?mode=' + nextMode + '&relevance=' + relevance,
 				method: 'GET'
 			}).then(function (response) {
 				setSlotInfo({ date: response.date, time: response.time, iso: response.iso });
@@ -210,7 +218,7 @@
 		function onScheduleAddFirst() {
 			setIsLoading(true);
 			apiFetch({
-				path: '/wp-queuepress/v1/posts/' + postId + '/add-first-preview',
+				path: '/wp-queuepress/v1/posts/' + postId + '/add-first-preview?relevance=' + relevance,
 				method: 'GET'
 			}).then(function (preview) {
 				setAddFirstPreview(preview);
@@ -249,7 +257,7 @@
 		var isQueueMode = ('add_to_queue' === mode || 'add_first' === mode);
 		var slotLabel   = slotInfo ? formatSlotLabel(slotInfo.date, slotInfo.time) : '';
 
-		var helpText = __('Choose how QueuePress should prepare this post.', 'wp-queuepress');
+		var helpText = __('Choose a relevance and queue mode for this post.', 'wp-queuepress');
 		if (isLoading) {
 			helpText = __('Calculating preview...', 'wp-queuepress');
 		} else if (errorMessage) {
@@ -403,6 +411,23 @@
 						{ label: __('Add First',    'wp-queuepress'), value: 'add_first'    }
 					],
 					onChange: onModeChange
+				}),
+				createElement(SelectControl, {
+					label: __('Relevance', 'wp-queuepress'),
+					value: relevance,
+					disabled: isLoading,
+					options: [
+						{ label: __('Immediate', 'wp-queuepress'), value: 'immediate' },
+						{ label: __('Media', 'wp-queuepress'), value: 'media' },
+						{ label: __('Fill', 'wp-queuepress'), value: 'fill' }
+					],
+					onChange: function (value) {
+						setRelevance(value);
+						if ('none' !== mode) {
+							setSlotInfo(null);
+						setQueueMeta(mode, value);
+						}
+					}
 				}),
 				isLoading ? createElement(Spinner, null) : null,
 				createElement(

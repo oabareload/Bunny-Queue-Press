@@ -95,6 +95,7 @@ final class Settings_Page {
 			'version'  => WP_QUEUEPRESS_VERSION,
 			'settings' => $this->preferences->get(),
 			'slots'    => $this->slot_repository->get_weekly_slots(),
+			'media_slots' => $this->slot_repository->get_weekly_slots('media'),
 		);
 
 		nocache_headers();
@@ -116,6 +117,7 @@ final class Settings_Page {
 
 		check_admin_referer('wp_queuepress_reset_slots');
 		update_option(Slot_Repository::OPTION_NAME, array());
+		update_option(Slot_Repository::MEDIA_OPTION_NAME, array());
 
 		wp_safe_redirect(
 			add_query_arg(

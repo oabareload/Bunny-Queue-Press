@@ -108,14 +108,28 @@ final class Pipeline_Page {
 			$this->post_query->get_posts_between('draft', $published_from, $now),
 			$now
 		);
-		// Flatten scheduled groups so the Pipeline UI can compute first/last
-		// at the card level for Move Down affordance. The grouping by day is
-		// preserved visually in render_scheduled_groups().
-		$scheduled_posts = $this->post_query->get_posts_between('future', $now, $future_window);
-		$scheduled_groups = $this->group_posts_by_day($scheduled_posts, $timezone);
-		$flat_scheduled   = array();
-		foreach ($scheduled_groups as $day_posts) {
-			foreach ($day_posts as $p) { $flat_scheduled[] = $p; }
+		$future_query = new \WP_Query(
+			array(
+				'post_type'              => 'post',
+				'post_status'            => 'future',
+				'posts_per_page'         => -1,
+				'orderby'                => array('date' => 'ASC', 'ID' => 'ASC'),
+				'ignore_sticky_posts'    => true,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => true,
+				'update_post_term_cache' => false,
+			)
+		);
+		$future_posts = $future_query->posts;
+		$immediate_scheduled = array();
+		$media_scheduled = array();
+		foreach ($future_posts as $future_post) {
+			$relevance = (string) get_post_meta($future_post->ID, '_wp_queuepress_relevance', true);
+			if ('immediate' === $relevance) {
+				$immediate_scheduled[] = $future_post;
+			} elseif (in_array($relevance, array('media', 'fill'), true)) {
+				$media_scheduled[] = $future_post;
+			}
 		}
 		$published_query = new \WP_Query(
 			array(
@@ -126,7 +140,7 @@ final class Pipeline_Page {
 				'order'                  => 'DESC',
 				'ignore_sticky_posts'    => true,
 				'no_found_rows'          => true,
-				'update_post_meta_cache' => false,
+				'update_post_meta_cache' => true,
 				'update_post_term_cache' => false,
 				'date_query'             => array(
 					array(
@@ -141,7 +155,7 @@ final class Pipeline_Page {
 
 		$published_posts  = $published_query->posts;
 		$draft_groups     = $this->group_posts_by_day($future_drafts, $timezone);
-		$scheduled_groups = $this->group_posts_by_day($scheduled_posts, $timezone);
+		$future_groups    = $this->group_posts_by_day($future_posts, $timezone);
 		$published_groups = $this->group_posts_by_day($published_posts, $timezone);
 		?>
 		<div class="wrap bunny-wrap">
@@ -150,7 +164,6 @@ final class Pipeline_Page {
 			<p class="description">
 				<?php echo esc_html__('A lightweight editorial overview of drafts, scheduled posts, and recently published content.', 'wp-queuepress'); ?>
 			</p>
-
 			<div class="qps-pipeline-grid">
 				<section class="qps-pipeline-column">
 					<header class="qps-pipeline-column-header">
@@ -164,11 +177,11 @@ final class Pipeline_Page {
 
 				<section class="qps-pipeline-column">
 					<header class="qps-pipeline-column-header">
-						<h2><?php echo esc_html__('Scheduled', 'wp-queuepress'); ?></h2>
-						<p><?php echo esc_html__('Future scheduled posts for the coming weeks.', 'wp-queuepress'); ?></p>
+						<h2><?php echo esc_html__('Future', 'wp-queuepress'); ?></h2>
+						<p><?php echo esc_html__('All WordPress scheduled posts.', 'wp-queuepress'); ?></p>
 					</header>
 					<div class="qps-pipeline-column-body">
-						<?php $this->render_grouped_post_column($scheduled_groups, $timezone, __('No scheduled posts found.', 'wp-queuepress'), 'scheduled'); ?>
+						<?php $this->render_grouped_post_column($future_groups, $timezone, __('No future posts found.', 'wp-queuepress'), 'future', array('immediate' => $immediate_scheduled, 'media' => $media_scheduled)); ?>
 					</div>
 				</section>
 
@@ -236,31 +249,25 @@ final class Pipeline_Page {
 	 * @param array<string,array<int,\WP_Post>> $groups        Grouped posts by day.
 	 * @param DateTimeZone                      $timezone      Site timezone.
 	 * @param string                            $empty_message Empty state message.
-	 * @param string                            $section       Section identifier. Only 'scheduled'
+	 * @param string                            $section       Section identifier. Only 'future'
 	 *                                                          enables Move Down / drag&drop affordances.
 	 * @return void
 	 */
-	private function render_grouped_post_column(array $groups, DateTimeZone $timezone, string $empty_message, string $section = ''): void {
+	private function render_grouped_post_column(array $groups, DateTimeZone $timezone, string $empty_message, string $section = '', array $scheduled_calendars = array()): void {
 		if (empty($groups)) {
 			$this->render_empty_state($empty_message);
 			return;
 		}
 
-		// Build the swap affordance flags per post ID for the 'scheduled' section.
-		// Flags: 'first' / 'last' indicate first/last in the FLATTENED scheduled queue,
-		// so Move First / Move Down can be hidden accordingly.
+		// Calculate movement boundaries independently for each scheduled calendar.
 		$swap_flags = array();
-		if ('scheduled' === $section) {
-			$flat = array();
-			foreach ($groups as $day_posts) {
-				foreach ($day_posts as $p) { $flat[] = (int) $p->ID; }
-			}
-			$count = count($flat);
-			foreach ($flat as $i => $pid) {
-			$swap_flags[$pid] = array(
-					'first' => (0 === $i),
-					'last'  => ($i === $count - 1),
-				);
+		if ('future' === $section) {
+			foreach ($scheduled_calendars as $scheduled_posts) {
+				$ids = array_map(static function (\WP_Post $post): int { return (int) $post->ID; }, $scheduled_posts);
+				$count = count($ids);
+				foreach ($ids as $index => $post_id) {
+					$swap_flags[$post_id] = array('first' => 0 === $index, 'last' => $index === $count - 1);
+				}
 			}
 		}
 
@@ -271,8 +278,8 @@ final class Pipeline_Page {
 					<strong><?php echo esc_html($day_label); ?></strong>
 					<span><?php echo esc_html(sprintf('%s %s', count($posts), _n('item', 'items', count($posts), 'wp-queuepress'))); ?></span>
 				</div>
-				<ul class="qps-card-list"<?php echo 'scheduled' === $section ? ' data-qps-swap-section="scheduled"' : ''; ?>>
-					<?php $this->render_post_cards($posts, $timezone, true, 'scheduled' === $section ? $swap_flags : array()); ?>
+				<ul class="qps-card-list"<?php echo 'future' === $section ? ' data-qps-swap-section="scheduled"' : ''; ?>>
+					<?php $this->render_post_cards($posts, $timezone, true, 'future' === $section ? $swap_flags : array()); ?>
 				</ul>
 			</div>
 			<?php
@@ -322,6 +329,7 @@ final class Pipeline_Page {
 			$_t = get_the_title($post);
 			$title         = ( '' !== $_t && null !== $_t ) ? $_t : __('(no title)', 'wp-queuepress');
 			$status        = $this->get_post_status_label($post->post_status);
+			$relevance     = (string) get_post_meta($post->ID, '_wp_queuepress_relevance', true);
 			$thumbnail     = get_the_post_thumbnail_url($post, array(180, 180));
 			$channels_meta = get_post_meta($post->ID, Buffer_Ajax::META_KEY, true);
 			if (! is_array($channels_meta)) { $channels_meta = array(); }
@@ -356,12 +364,15 @@ final class Pipeline_Page {
 			$show_move_down = ! empty($flags) && empty($flags['last']);
 			$show_move_up   = ! empty($flags) && empty($flags['first']);
 			$show_move_top  = ! empty($flags) && empty($flags['first']);
-			$is_draggable_scheduled   = ! empty($swap_flags) && isset($swap_flags[$pid_key]);
+			$is_draggable_scheduled   = 'future' === $post->post_status && isset($swap_flags[$pid_key]);
+			$calendar_scope           = 'immediate' === $relevance ? 'immediate' : (in_array($relevance, array('media', 'fill'), true) ? 'media' : '');
+			$relevance_class          = in_array($relevance, array('immediate', 'media', 'fill'), true) ? ' qps-badge--' . $relevance : '';
 			$li_classes               = 'qps-card';
 			if ($is_draggable_scheduled) { $li_classes .= ' qps-card--draggable'; }
 			?>
 			<li class="<?php echo esc_attr($li_classes); ?>"
 			    data-post-id="<?php echo esc_attr((string) $post->ID); ?>"
+			    <?php echo $is_draggable_scheduled ? 'data-qps-calendar="' . esc_attr($calendar_scope) . '"' : ''; ?>
 			    <?php echo $is_draggable_scheduled ? 'draggable="true"' : ''; ?>>
 				<div class="qps-card-inner">
 					<div class="qps-card-image<?php echo $thumbnail ? '' : ' qps-card-image--placeholder'; ?>">
@@ -563,6 +574,9 @@ final class Pipeline_Page {
 								<time><?php echo esc_html(wp_date($this->preferences->get_time_format(), $post_time->getTimestamp())); ?></time>
 							<?php endif; ?>
 							<span class="qps-badge <?php echo esc_attr($status['class']); ?>"><?php echo esc_html($status['label']); ?></span>
+			<?php if (in_array($relevance, array('immediate', 'media', 'fill'), true)) : ?>
+				<span class="qps-badge qps-badge--relevance<?php echo esc_attr($relevance_class); ?>"><?php echo esc_html($this->get_relevance_label($relevance)); ?></span>
+			<?php endif; ?>
 						</div><!-- .qps-card-meta -->
 					</div><!-- .qps-card-body -->
 				</div><!-- .qps-card-inner -->
@@ -717,6 +731,16 @@ final class Pipeline_Page {
 			return array('label' => __('Published', 'wp-queuepress'), 'class' => 'is-published');
 		}
 		return array('label' => __('Draft', 'wp-queuepress'), 'class' => 'is-draft');
+	}
+
+	/** Returns the translated label for a persisted queue relevance. */
+	private function get_relevance_label(string $relevance): string {
+		$labels = array(
+			'immediate' => __('Immediate', 'wp-queuepress'),
+			'media' => __('Media', 'wp-queuepress'),
+			'fill' => __('Fill', 'wp-queuepress'),
+		);
+		return $labels[$relevance] ?? '';
 	}
 
 	/**

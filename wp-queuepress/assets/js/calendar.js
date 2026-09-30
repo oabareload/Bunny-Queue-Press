@@ -13,10 +13,9 @@
 		return null;
 	}
 
-	function getWeekStart() {
-		var wrap = document.querySelector('[data-wp-queuepress-week]');
-
-		return wrap ? wrap.getAttribute('data-wp-queuepress-week') : '';
+	function getCalendar() {
+		var control = document.querySelector('.qps-slot-calendar');
+		return control ? control.value : 'immediate';
 	}
 
 	function getGlobalManager() {
@@ -55,16 +54,19 @@
 	}
 
 	function buildWeeklySlotsFromDOM() {
-		WEEKDAYS.forEach(function(day) { weeklySlots[day] = []; });
+		weeklySlots = { immediate: {}, media: {} };
+		['immediate', 'media'].forEach(function(calendar) {
+			WEEKDAYS.forEach(function(day) { weeklySlots[calendar][day] = []; });
+		});
 
 		document.querySelectorAll('.qps-slot-manager[data-day]').forEach(function(manager) {
 			var day = manager.getAttribute('data-day');
 			var list = manager.querySelectorAll('.qps-slot-list .qps-slot');
-			weeklySlots[day] = [];
 			list.forEach(function(li){
 				var time = li.getAttribute('data-time');
-				if (time) {
-					weeklySlots[day].push(time);
+				var calendar = li.getAttribute('data-calendar');
+				if (time && weeklySlots[calendar] && weeklySlots[calendar][day]) {
+					weeklySlots[calendar][day].push(time);
 				}
 			});
 		});
@@ -80,24 +82,27 @@
 	}
 
 	function renderDaysFromState() {
-		Object.keys(weeklySlots).forEach(function(day) {
+		WEEKDAYS.forEach(function(day) {
 			var manager = document.querySelector('.qps-slot-manager[data-day="' + day + '"]');
 			if (!manager) return;
 			var wrap = manager.querySelector('.qps-slot-list-wrap');
 			if (!wrap) return;
-			if (!weeklySlots[day] || weeklySlots[day].length === 0) {
-				wrap.innerHTML = '<div class="qps-empty"><span>' + (window.wpQueuePressSlots && window.wpQueuePressSlots.messages && window.wpQueuePressSlots.messages.emptyText ? window.wpQueuePressSlots.messages.emptyText : 'No configured slots.') + '</span></div>';
-				return;
-			}
-
-			var html = '<ul class="qps-slot-list">';
-			weeklySlots[day].forEach(function(time) {
-				html += '<li class="qps-slot is-free" data-time="' + time + '">';
-				html += '<div class="qps-slot-main"><time>' + time + '</time></div>';
-				html += '<button type="button" class="button-link-delete qps-slot-delete" data-day="' + day + '" data-time="' + time + '">' + (window.wpQueuePressSlots && window.wpQueuePressSlots.messages && window.wpQueuePressSlots.messages.deleteText ? window.wpQueuePressSlots.messages.deleteText : 'Delete') + '</button>';
+			var slots = [];
+			['immediate', 'media'].forEach(function(calendar) {
+				(weeklySlots[calendar][day] || []).forEach(function(time) {
+					slots.push({ time: time, calendar: calendar });
+				});
+			});
+			slots.sort(function(a, b) { return a.time.localeCompare(b.time) || a.calendar.localeCompare(b.calendar); });
+			var html = slots.length ? '<ul class="qps-slot-list">' : '';
+		slots.forEach(function(slot) {
+				var label = 'immediate' === slot.calendar ? window.wpQueuePressSlots.messages.immediate : window.wpQueuePressSlots.messages.media;
+				html += '<li class="qps-slot qps-slot--' + slot.calendar + '" data-time="' + slot.time + '" data-calendar="' + slot.calendar + '">';
+				html += '<div class="qps-slot-main"><time>' + slot.time + '</time><span class="qps-badge">' + label + '</span></div>';
+				html += '<button type="button" class="button-link-delete qps-slot-delete" data-day="' + day + '" data-calendar="' + slot.calendar + '" data-time="' + slot.time + '">' + (window.wpQueuePressSlots.messages.deleteText || 'Delete') + '</button>';
 				html += '</li>';
 			});
-			html += '</ul>';
+			if (slots.length) { html += '</ul>'; }
 			wrap.innerHTML = html;
 		});
 	}
@@ -125,7 +130,7 @@
 
 		body.append('action', action);
 		body.append('nonce', window.wpQueuePressSlots.nonce);
-		body.append('week_start', getWeekStart());
+		body.append('calendar', getCalendar());
 
 		Object.keys(payload).forEach(function (key) {
 			body.append(key, payload[key]);
@@ -213,8 +218,8 @@
 				var day = saveManager.querySelector('.qps-slot-day').value;
 				var parsed = parseScheduleFor(scheduleFor);
 
-				if (!time) {
-					setMessage(saveManager, window.wpQueuePressSlots.messages.invalidTime, true);
+				if (!time || time < (window.wpQueuePressSlots.minimumTime || '05:00')) {
+					setMessage(saveManager, window.wpQueuePressSlots.messages.minimumTime, true);
 					return;
 				}
 
@@ -222,6 +227,7 @@
 				setMessage(saveManager, window.wpQueuePressSlots.messages.saving, false);
 
 				// Local-only mutation: resolve target days and update weeklySlots.
+				var calendar = saveManager.querySelector('.qps-slot-calendar').value;
 				var targets = [];
 				if (parsed.scope === 'day') {
 					targets = [day];
@@ -234,10 +240,10 @@
 				}
 
 				targets.forEach(function(targetDay) {
-					weeklySlots[targetDay] = weeklySlots[targetDay] || [];
-					if (-1 === weeklySlots[targetDay].indexOf(time)) {
-						weeklySlots[targetDay].push(time);
-						weeklySlots[targetDay].sort();
+					weeklySlots[calendar][targetDay] = weeklySlots[calendar][targetDay] || [];
+					if (-1 === weeklySlots[calendar][targetDay].indexOf(time)) {
+						weeklySlots[calendar][targetDay].push(time);
+						weeklySlots[calendar][targetDay].sort();
 					}
 				});
 
@@ -254,10 +260,11 @@
 				var messageManager = getGlobalManager() || removeManager;
 
 				var day = remove.getAttribute('data-day');
+				var calendar = remove.getAttribute('data-calendar');
 				var time = remove.getAttribute('data-time');
 
-				if (day && time && Array.isArray(weeklySlots[day])) {
-					weeklySlots[day] = weeklySlots[day].filter(function(t){ return t !== time; });
+				if (day && time && weeklySlots[calendar] && Array.isArray(weeklySlots[calendar][day])) {
+					weeklySlots[calendar][day] = weeklySlots[calendar][day].filter(function(t){ return t !== time; });
 					renderDaysFromState();
 					markDirty(true);
 				}
@@ -304,16 +311,16 @@
 		});
 	}
 
-	function showRebuildNotice(count) {
-		var container = document.querySelector('.qps-rebuild-notice');
+	function showRebuildNotice(count, container) {
+		container = container || document.querySelector('.qps-rebuild-notice');
 		if (!container) return;
 		if (!count || count < 1) {
 			container.hidden = true;
 			return;
 		}
 		container.hidden = false;
-		container.innerHTML = '<div class="qps-rebuild-message">' + count + ' scheduled posts may no longer match the current queue settings.</div>' +
-			'<div class="qps-rebuild-actions"><button class="button button-primary qps-preview-rebuild">Preview Rebuild</button> <button class="button qps-rebuild-dismiss">Dismiss</button></div>';
+		container.innerHTML = '<div class="qps-rebuild-message">' + window.wpQueuePressSlots.messages.rebuildPrompt + '</div>' +
+			'<div class="qps-rebuild-actions"><button class="button button-primary qps-preview-rebuild">' + window.wpQueuePressSlots.messages.previewRebuild + '</button> <button class="button qps-rebuild-dismiss">' + window.wpQueuePressSlots.messages.dismiss + '</button></div>';
 
 		var preview = container.querySelector('.qps-preview-rebuild');
 		var dismiss = container.querySelector('.qps-rebuild-dismiss');
@@ -324,6 +331,7 @@
 				var body = new FormData();
 				body.append('action', 'wp_queuepress_preview_rebuild');
 				body.append('nonce', window.wpQueuePressSlots.nonce);
+				body.append('calendar', container.getAttribute('data-calendar') || getCalendar());
 
 				window.fetch(window.wpQueuePressSlots.ajaxUrl, {
 					method: 'POST',
@@ -467,6 +475,7 @@
 				var body = new FormData();
 				body.append('action', 'wp_queuepress_apply_rebuild');
 				body.append('nonce', window.wpQueuePressSlots.nonce);
+				body.append('calendar', container.getAttribute('data-calendar') || getCalendar());
 
 				window.fetch(window.wpQueuePressSlots.ajaxUrl, {
 					method: 'POST',
@@ -592,8 +601,6 @@
 				var msg = (typeof data.message === 'string' && data.message.length) ? data.message : 'Slots saved.';
 				if (status) { status.textContent = msg; }
 
-				// Show rebuild notice once after save (if any scheduled posts exist).
-				showRebuildNotice(data.scheduled_posts_count || 0);
 			}).catch(function(err){
 				if (status) { status.textContent = err.message || 'Failed to save slots.'; }
 			}).finally(function(){
@@ -612,6 +619,12 @@
 		});
 	}
 
+	function initRebuildNotices() {
+		document.querySelectorAll('.qps-rebuild-notice[data-calendar]').forEach(function(container) {
+			showRebuildNotice(1, container);
+		});
+	}
+
 	if ('loading' === document.readyState) {
 		document.addEventListener('DOMContentLoaded', function(){
 			buildWeeklySlotsFromDOM();
@@ -621,6 +634,7 @@
 			initSaveButton();
 			initUnsavedWarning();
 			init();
+			initRebuildNotices();
 		});
 	} else {
 		buildWeeklySlotsFromDOM();
@@ -630,5 +644,6 @@
 		initSaveButton();
 		initUnsavedWarning();
 		init();
+		initRebuildNotices();
 	}
 }());

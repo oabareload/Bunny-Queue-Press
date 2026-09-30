@@ -2,7 +2,7 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: WP QueuePress 1.0.0\n"
+"Project-Id-Version: WP QueuePress 2.7.4\n"
 "Report-Msgid-Bugs-To: https://bunnychase.net/\n"
 "POT-Creation-Date: 2026-05-10 00:00+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -21,6 +21,84 @@ msgid "A lightweight editorial scheduling plugin for WordPress that allows creat
 msgstr ""
 
 msgid "Calendar"
+msgstr ""
+
+msgid "Immediate"
+msgstr ""
+
+msgid "Media"
+msgstr ""
+
+msgid "Fill"
+msgstr ""
+
+msgid "Relevance"
+msgstr ""
+
+msgid "Media and Fill"
+msgstr ""
+
+msgid "Daily maintenance runs at 04:00 site time. Publishing slots must be at or after 05:00."
+msgstr ""
+
+msgid "Slots must be at or after 05:00 in the WordPress site timezone."
+msgstr ""
+
+msgid "Publishing slots must be at or after 05:00 (WordPress site timezone)."
+msgstr ""
+
+msgid "Below minimum (05:00)"
+msgstr ""
+
+msgid "This existing slot is inactive. Delete it before saving changes."
+msgstr ""
+
+msgid "Calendar slot types"
+msgstr ""
+
+msgid "Editorial Timeline"
+msgstr ""
+
+msgid "Drafts, scheduled posts, and recently published content in date order."
+msgstr ""
+
+msgid "No pipeline posts found."
+msgstr ""
+
+msgid "Future"
+msgstr ""
+
+msgid "All WordPress scheduled posts."
+msgstr ""
+
+msgid "No future posts found."
+msgstr ""
+
+msgid "Queue rebuild tools"
+msgstr ""
+
+msgid "Rebuild Scheduled Queues"
+msgstr ""
+
+msgid "Preview a rebuild for this calendar."
+msgstr ""
+
+msgid "Preview Rebuild"
+msgstr ""
+
+msgid "Dismiss"
+msgstr ""
+
+msgid "Invalid time format."
+msgstr ""
+
+msgid "Some Immediate and Media slots share a day and time. They remain independent and can schedule two different posts."
+msgstr ""
+
+msgid "No scheduled immediate posts found."
+msgstr ""
+
+msgid "No scheduled media or Fill posts found."
 msgstr ""
 
 msgid "Settings"
@@ -63,21 +141,6 @@ msgid "Scheduled Posts"
 msgstr ""
 
 msgid "Published Posts"
-msgstr ""
-
-msgid "Calendar week navigation"
-msgstr ""
-
-msgid "Week of"
-msgstr ""
-
-msgid "Previous Week"
-msgstr ""
-
-msgid "Current Week"
-msgstr ""
-
-msgid "Next Week"
 msgstr ""
 
 msgid "No configured slots."

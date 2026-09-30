@@ -342,10 +342,9 @@
 	 *
 	 * @returns {NodeList}
 	 */
-	function scheduledCards() {
-		// All swap-enabled cards live inside lists marked data-qps-swap-section="scheduled".
-		// querySelectorAll on the document returns them in DOM order.
-		return document.querySelectorAll( '[data-qps-swap-section="scheduled"] .qps-card--draggable' );
+	function scheduledCards( card ) {
+		var calendar = card && card.getAttribute( 'data-qps-calendar' );
+		return calendar ? document.querySelectorAll( '.qps-card--draggable[data-qps-calendar="' + calendar + '"]' ) : [];
 	}
 
 	/**
@@ -353,8 +352,8 @@
 	 *
 	 * @returns {Element[]}
 	 */
-	function scheduledCardsArray() {
-		return Array.prototype.slice.call( scheduledCards() );
+	function scheduledCardsArray( card ) {
+		return Array.prototype.slice.call( scheduledCards( card ) );
 	}
 
 	/**
@@ -389,7 +388,7 @@
 		} )
 			.then( function ( res ) { return res.json(); } )
 			.then( function ( data ) {
-				if ( data && data.applied === 2 ) {
+				if ( data && data.applied > 0 ) {
 					showFeedback( feedbackEl, 'success', i18n.swapSuccess || 'Schedule updated.' );
 					window.setTimeout( function () { window.location.reload(); }, 350 );
 				} else {
@@ -427,7 +426,7 @@
 			var card   = btn.closest( '.qps-card' );
 			if ( ! card ) { return; }
 
-			var cards    = scheduledCardsArray();
+			var cards    = scheduledCardsArray( card );
 			var firstCard = cards[ 0 ];
 			if ( ! firstCard || firstCard === card ) { return; }
 
@@ -455,7 +454,7 @@
 			var card = btn.closest( '.qps-card' );
 			if ( ! card ) { return; }
 
-			var cards = scheduledCardsArray();
+			var cards = scheduledCardsArray( card );
 			var idx   = cards.indexOf( card );
 			if ( idx <= 0 ) { return; }
 
@@ -484,7 +483,7 @@
 			var card = btn.closest( '.qps-card' );
 			if ( ! card ) { return; }
 
-			var cards    = scheduledCardsArray();
+			var cards    = scheduledCardsArray( card );
 			var idx      = cards.indexOf( card );
 			if ( idx < 0 || idx >= cards.length - 1 ) { return; }
 
@@ -531,7 +530,9 @@
 			e.preventDefault();
 			try { e.dataTransfer.dropEffect = 'move'; } catch ( _e ) {}
 			// Only highlight if this is a valid different target.
-			if ( cardPostId( card ) !== dragSourceId ) {
+			var sourceCard = document.querySelector( '.qps-card[data-post-id="' + dragSourceId + '"]' );
+			if ( cardPostId( card ) !== dragSourceId && sourceCard
+				&& sourceCard.getAttribute( 'data-qps-calendar' ) === card.getAttribute( 'data-qps-calendar' ) ) {
 				card.classList.add( 'qps-card--drag-over' );
 			}
 		} );
@@ -571,9 +572,10 @@
 			} );
 
 			if ( ! sourceId || ! targetId || sourceId === targetId ) { return; }
+			var sourceCard = document.querySelector( '.qps-card[data-post-id="' + sourceId + '"]' );
+			if (!sourceCard || sourceCard.getAttribute('data-qps-calendar') !== targetCard.getAttribute('data-qps-calendar')) { return; }
 
 			// Show feedback anchored to the source card if we can find it.
-			var sourceCard = document.querySelector( '.qps-card[data-post-id="' + sourceId + '"]' );
 			var feedback   = ( sourceCard || targetCard ).querySelector( '.qps-card-feedback' );
 			callSwapAndReload( sourceId, targetId, feedback );
 		} );

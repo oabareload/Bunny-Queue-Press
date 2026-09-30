@@ -89,6 +89,10 @@ final class Queue_Controller {
 						'sanitize_callback' => 'sanitize_key',
 						'enum'              => array('add_to_queue', 'add_first'),
 					),
+					'relevance' => array(
+						'type' => 'string', 'required' => false, 'default' => 'media',
+						'sanitize_callback' => 'sanitize_key', 'enum' => array('immediate', 'media', 'fill'),
+					),
 				),
 			)
 		);
@@ -105,6 +109,10 @@ final class Queue_Controller {
 						'type'              => 'integer',
 						'required'          => true,
 						'sanitize_callback' => 'absint',
+					),
+					'relevance' => array(
+						'type' => 'string', 'required' => false, 'default' => 'media',
+						'sanitize_callback' => 'sanitize_key', 'enum' => array('immediate', 'media', 'fill'),
 					),
 				),
 			)
@@ -301,9 +309,10 @@ final class Queue_Controller {
 	public function get_next_slot(\WP_REST_Request $request) {
 		$post_id = (int) $request['id'];
 		$mode    = (string) $request['mode'];
+		$relevance = (string) $request['relevance'];
 		$slot    = 'add_first' === $mode
-			? $this->queue_assigner->find_first_queue_slot()
-			: $this->queue_assigner->find_next_slot($post_id);
+			? $this->queue_assigner->find_first_queue_slot($relevance)
+			: $this->queue_assigner->find_next_slot($post_id, $relevance);
 
 		if (null === $slot) {
 			return new \WP_Error(
@@ -319,6 +328,7 @@ final class Queue_Controller {
 				'time' => $slot->format('H:i'),
 				'iso'  => $slot->format('Y-m-d\TH:i:s'),
 				'mode' => $mode,
+				'relevance' => $relevance,
 			)
 		);
 	}
@@ -347,7 +357,7 @@ final class Queue_Controller {
 		// At preview time the post is still a draft, so we simulate: build
 		// the plan as if the new post occupies the very first available slot,
 		// then list the existing scheduled posts shifted after it.
-		$plan = $this->queue_rebuilder->compute_add_first_preview($post_id);
+		$plan = $this->queue_rebuilder->compute_add_first_preview($post_id, (string) $request['relevance']);
 
 		if (empty($plan)) {
 			return new \WP_Error(
@@ -402,7 +412,9 @@ final class Queue_Controller {
 	 * @return \WP_REST_Response
 	 */
 	public function delete_queue_mode(\WP_REST_Request $request): \WP_REST_Response {
-		delete_post_meta((int) $request['id'], '_wp_queuepress_queue_mode');
+		$post_id = (int) $request['id'];
+		delete_post_meta($post_id, '_wp_queuepress_queue_mode');
+		delete_post_meta($post_id, '_wp_queuepress_relevance');
 
 		return rest_ensure_response(array('deleted' => true));
 	}

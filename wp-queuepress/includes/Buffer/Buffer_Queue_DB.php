@@ -71,6 +71,14 @@ final class Buffer_Queue_DB {
 	 */
 	public function add_job(int $post_id, string $network, string $channel_id, int $attempts = 0, string $last_error = '', string $share_mode = 'addToQueue') {
 		global $wpdb;
+		$relevance = (string) get_post_meta($post_id, '_wp_queuepress_relevance', true);
+		if ('immediate' === $relevance) {
+			$share_mode = 'shareNow';
+		} else {
+			$share_mode = 'addToQueue';
+		}
+
+		// Enforce the supported share modes before persisting the job.
 		if (! in_array($share_mode, array('addToQueue', 'shareNow'), true)) {
 			$share_mode = 'addToQueue';
 		}

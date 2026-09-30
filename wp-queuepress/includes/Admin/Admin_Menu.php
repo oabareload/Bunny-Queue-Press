@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace QueuePostScheduler\Admin;
 
+use QueuePostScheduler\Schedule\Slot_Repository;
+
 if (! defined('ABSPATH')) {
 	exit;
 }
@@ -290,10 +292,16 @@ final class Admin_Menu {
 				'pipelineUrl' => admin_url('admin.php?page=qps-pipeline'),
 				'messages'    => array(
 					'invalidTime' => __('Invalid time.', 'wp-queuepress'),
+					'minimumTime' => __('Slots must be at or after 05:00 in the WordPress site timezone.', 'wp-queuepress'),
 					'saving'      => __('Saving...', 'wp-queuepress'),
 					'deleteText'  => __('Delete', 'wp-queuepress'),
-					'emptyText'   => __('No configured slots.', 'wp-queuepress'),
+					'immediate'   => __('Immediate', 'wp-queuepress'),
+					'media'       => __('Media', 'wp-queuepress'),
+					'dismiss' => __('Dismiss', 'wp-queuepress'),
+					'previewRebuild' => __('Preview Rebuild', 'wp-queuepress'),
+					'rebuildPrompt' => __('Preview a rebuild for this calendar.', 'wp-queuepress'),
 				),
+				'minimumTime' => Slot_Repository::MINIMUM_SLOT_TIME,
 			)
 		);
 	}

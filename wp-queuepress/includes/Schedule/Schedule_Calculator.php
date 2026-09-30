@@ -53,18 +53,20 @@ final class Schedule_Calculator {
 	 * @param array<int,\WP_Post> $posts Optional post list when the caller already queried it.
 	 * @return array<string,array<int,array<string,mixed>>>
 	 */
-	public function get_week_availability(DateTimeImmutable $week_start, DateTimeImmutable $week_end, array $posts = array()): array {
+	public function get_week_availability(DateTimeImmutable $week_start, DateTimeImmutable $week_end, array $posts = array(), string $calendar = 'immediate'): array {
 		$timezone     = wp_timezone();
-		$weekly_slots = $this->slot_repository->get_weekly_slots();
+		$calendar     = 'media' === $calendar ? 'media' : 'immediate';
+		$weekly_slots = $this->slot_repository->get_weekly_slots($calendar);
+		$relevances   = 'media' === $calendar ? array('media', 'fill') : array('immediate');
 
 		if (empty($posts)) {
 			$posts = array_merge(
-				$this->post_query->get_posts_between('future', $week_start, $week_end),
-				$this->post_query->get_posts_between('publish', $week_start, $week_end)
+				$this->post_query->get_posts_between('future', $week_start, $week_end, $relevances, -1),
+				$this->post_query->get_posts_between('publish', $week_start, $week_end, $relevances, -1)
 			);
 		}
 
-		$occupied_times = $this->build_occupied_time_index($posts, $timezone);
+		$occupied_times = $this->build_occupied_time_index($posts, $timezone, $calendar);
 		$availability   = array();
 
 		for ($i = 0; $i < 7; $i++) {
@@ -73,12 +75,13 @@ final class Schedule_Calculator {
 			$day_date = $day->format('Y-m-d');
 
 			$availability[$day_date] = array_map(
-				static function (string $time) use ($day_date, $occupied_times): array {
-					$slot_key = $day_date . ' ' . $time;
+				function (string $time) use ($day_date, $occupied_times, $calendar): array {
+					$slot_key = $calendar . '|' . $day_date . ' ' . $time;
 
 					return array(
 						'date'     => $day_date,
 						'time'     => $time,
+						'allowed'  => $this->slot_repository->is_valid_time($time),
 						'occupied' => isset($occupied_times[$slot_key]),
 						'post_id'  => $occupied_times[$slot_key] ?? null,
 					);
@@ -101,13 +104,13 @@ final class Schedule_Calculator {
 	 * @param array<int,\WP_Post> $posts Optional post list when the caller already queried it.
 	 * @return array<int,array<string,mixed>>
 	 */
-	public function get_free_slots(DateTimeImmutable $week_start, DateTimeImmutable $week_end, array $posts = array()): array {
-		$availability = $this->get_week_availability($week_start, $week_end, $posts);
+	public function get_free_slots(DateTimeImmutable $week_start, DateTimeImmutable $week_end, array $posts = array(), string $calendar = 'immediate'): array {
+		$availability = $this->get_week_availability($week_start, $week_end, $posts, $calendar);
 		$free_slots   = array();
 
 		foreach ($availability as $day_slots) {
 			foreach ($day_slots as $slot) {
-				if (empty($slot['occupied'])) {
+				if (! empty($slot['allowed']) && empty($slot['occupied'])) {
 					$free_slots[] = $slot;
 				}
 			}
@@ -123,13 +126,13 @@ final class Schedule_Calculator {
 	 * @param DateTimeZone       $timezone Site timezone.
 	 * @return array<string,int>
 	 */
-	private function build_occupied_time_index(array $posts, DateTimeZone $timezone): array {
+	private function build_occupied_time_index(array $posts, DateTimeZone $timezone, string $calendar): array {
 		$occupied = array();
 
 		foreach ($posts as $post) {
 			// WordPress stores post_date in local site time, which matches slot configuration.
 			$post_time = new DateTimeImmutable($post->post_date, $timezone);
-			$key       = $post_time->format('Y-m-d H:i');
+			$key       = $calendar . '|' . $post_time->format('Y-m-d H:i');
 
 			$occupied[$key] = (int) $post->ID;
 		}

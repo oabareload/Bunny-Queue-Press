@@ -27,18 +27,29 @@ final class Post_Query {
 	 * @param DateTimeImmutable $end End date in the site timezone.
 	 * @return array<int,\WP_Post>
 	 */
-	public function get_posts_between(string $status, DateTimeImmutable $start, DateTimeImmutable $end): array {
+	public function get_posts_between(string $status, DateTimeImmutable $start, DateTimeImmutable $end, $relevance = null, int $limit = 100): array {
+		$meta_query = array();
+		if (is_string($relevance) && in_array($relevance, array('immediate', 'media', 'fill'), true)) {
+			$meta_query[] = array('key' => '_wp_queuepress_relevance', 'value' => $relevance, 'compare' => '=');
+		} elseif (is_array($relevance) && ! empty($relevance)) {
+			$valid = array_values(array_intersect($relevance, array('immediate', 'media', 'fill')));
+			if (! empty($valid)) {
+				$meta_query[] = array('key' => '_wp_queuepress_relevance', 'value' => $valid, 'compare' => 'IN');
+			}
+		}
+
 		$query = new \WP_Query(
 			array(
 				'post_type'              => 'post',
 				'post_status'            => $status,
-				'posts_per_page'         => 100,
+				'posts_per_page'         => $limit,
 				'orderby'                => 'date',
 				'order'                  => 'ASC',
 				'ignore_sticky_posts'    => true,
 				'no_found_rows'          => true,
 				'update_post_meta_cache' => false,
 				'update_post_term_cache' => false,
+				'meta_query'             => $meta_query,
 				'date_query'             => array(
 					array(
 						'after'     => $start->format('Y-m-d H:i:s'),

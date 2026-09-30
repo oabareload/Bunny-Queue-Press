@@ -75,7 +75,8 @@ final class Queue_Assigner {
 	 * @param int $post_id Post ID being queued.
 	 * @return DateTimeImmutable|null Null when no free slot exists within the window.
 	 */
-	public function find_next_slot(int $post_id): ?DateTimeImmutable {
+	public function find_next_slot(int $post_id, string $relevance = 'media'): ?DateTimeImmutable {
+		$calendar = 'immediate' === $relevance ? 'immediate' : 'media';
 		$timezone   = wp_timezone();
 		$now        = new DateTimeImmutable('now', $timezone);
 		$week_start = $this->get_start_of_week($now);
@@ -83,13 +84,13 @@ final class Queue_Assigner {
 		for ($week = 0; $week < self::SEARCH_WEEKS; $week++) {
 			$start = $week_start->modify('+' . $week . ' weeks');
 			$end   = $start->modify('+6 days')->setTime(23, 59, 59);
-			$posts = $this->get_occupying_posts($start, $end, $post_id);
+			$posts = $this->get_occupying_posts($start, $end, $post_id, $calendar);
 
 			if (empty($posts)) {
 				$posts = array((object) array('post_date' => '1970-01-01 00:00:00', 'ID' => 0));
 			}
 
-			$slots = $this->schedule_calculator->get_free_slots($start, $end, $posts);
+			$slots = $this->schedule_calculator->get_free_slots($start, $end, $posts, $calendar);
 
 			foreach ($slots as $slot) {
 				$slot_time = new DateTimeImmutable($slot['date'] . ' ' . $slot['time'], $timezone);
@@ -112,7 +113,8 @@ final class Queue_Assigner {
 	 *
 	 * @return DateTimeImmutable|null Null when no configured slot exists.
 	 */
-	public function find_first_queue_slot(): ?DateTimeImmutable {
+	public function find_first_queue_slot(string $relevance = 'media'): ?DateTimeImmutable {
+		$calendar = 'immediate' === $relevance ? 'immediate' : 'media';
 		$timezone       = wp_timezone();
 		$now            = new DateTimeImmutable('now', $timezone);
 		$week_start     = $this->get_start_of_week($now);
@@ -121,7 +123,7 @@ final class Queue_Assigner {
 		for ($week = 0; $week < self::SEARCH_WEEKS; $week++) {
 			$start = $week_start->modify('+' . $week . ' weeks');
 			$end   = $start->modify('+6 days')->setTime(23, 59, 59);
-			$slots = $this->schedule_calculator->get_free_slots($start, $end, $occupied_posts);
+			$slots = $this->schedule_calculator->get_free_slots($start, $end, $occupied_posts, $calendar);
 
 			foreach ($slots as $slot) {
 				$slot_time = new DateTimeImmutable($slot['date'] . ' ' . $slot['time'], $timezone);
@@ -165,10 +167,11 @@ final class Queue_Assigner {
 	 * @param int               $post_id Post being queued.
 	 * @return array<int,\WP_Post>
 	 */
-	private function get_occupying_posts(DateTimeImmutable $start, DateTimeImmutable $end, int $post_id): array {
+	private function get_occupying_posts(DateTimeImmutable $start, DateTimeImmutable $end, int $post_id, string $calendar): array {
+		$relevances = 'immediate' === $calendar ? array('immediate') : array('media', 'fill');
 		$posts = array_merge(
-			$this->post_query->get_posts_between('future', $start, $end),
-			$this->post_query->get_posts_between('publish', $start, $end)
+			$this->post_query->get_posts_between('future', $start, $end, $relevances, -1),
+			$this->post_query->get_posts_between('publish', $start, $end, $relevances, -1)
 		);
 
 		return array_values(
