@@ -57,7 +57,7 @@ final class Schedule_Calculator {
 		$timezone     = wp_timezone();
 		$calendar     = 'media' === $calendar ? 'media' : 'immediate';
 		$weekly_slots = $this->slot_repository->get_weekly_slots($calendar);
-		$relevances   = 'media' === $calendar ? array('media', 'fill') : array('immediate');
+		$relevances   = 'media' === $calendar ? array('media') : array('immediate');
 
 		if (empty($posts)) {
 			$posts = array_merge(

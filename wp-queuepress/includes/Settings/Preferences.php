@@ -25,7 +25,7 @@ final class Preferences {
 	/**
 	 * Returns normalized preferences.
 	 *
-	 * @return array<string,string|bool>
+	 * @return array<string,string|bool|int>
 	 */
 	public function get(): array {
 		$stored = get_option(self::OPTION_NAME, array());
@@ -37,7 +37,7 @@ final class Preferences {
 	 * Sanitizes submitted preferences.
 	 *
 	 * @param mixed $raw_settings Raw option value.
-	 * @return array<string,string|bool>
+	 * @return array<string,string|bool|int>
 	 */
 	public function sanitize($raw_settings): array {
 		$raw_settings = is_array($raw_settings) ? $raw_settings : array();
@@ -47,7 +47,15 @@ final class Preferences {
 			'time_format' => in_array($raw_settings['time_format'] ?? '', array('12', '24'), true) ? $raw_settings['time_format'] : '12',
 			'date_format' => in_array($raw_settings['date_format'] ?? '', array('F j, Y', 'j F Y', 'Y-m-d'), true) ? $raw_settings['date_format'] : 'F j, Y',
 			'pause_queue' => ! empty($raw_settings['pause_queue']),
+			'fill_days'   => in_array((string) ($raw_settings['fill_days'] ?? ''), array('15', '30'), true) ? (int) $raw_settings['fill_days'] : 30,
 		);
+	}
+
+	/** Returns the configured number of days before a new Fill expires. */
+	public function get_fill_days(): int {
+		$settings = $this->get();
+
+		return (int) $settings['fill_days'];
 	}
 
 	/**

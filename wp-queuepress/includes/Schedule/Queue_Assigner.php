@@ -104,6 +104,15 @@ final class Queue_Assigner {
 		return null;
 	}
 
+	/** Returns the local expiration date for a newly queued Fill post. */
+	public function get_fill_due_date(): DateTimeImmutable {
+		$due_date = (new DateTimeImmutable('now', wp_timezone()))
+			->modify('+' . $this->preferences->get_fill_days() . ' days');
+
+		// Maintenance runs at 04:00; keep the native future event after it.
+		return $due_date->setTime(5, 0, 0);
+	}
+
 	/**
 	 * Returns the first queue slot that an Add First rebuild would use.
 	 *
@@ -168,7 +177,7 @@ final class Queue_Assigner {
 	 * @return array<int,\WP_Post>
 	 */
 	private function get_occupying_posts(DateTimeImmutable $start, DateTimeImmutable $end, int $post_id, string $calendar): array {
-		$relevances = 'immediate' === $calendar ? array('immediate') : array('media', 'fill');
+		$relevances = 'immediate' === $calendar ? array('immediate') : array('media');
 		$posts = array_merge(
 			$this->post_query->get_posts_between('future', $start, $end, $relevances, -1),
 			$this->post_query->get_posts_between('publish', $start, $end, $relevances, -1)

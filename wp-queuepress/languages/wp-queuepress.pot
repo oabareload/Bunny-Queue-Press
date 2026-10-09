@@ -2,7 +2,7 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: WP QueuePress 2.7.4\n"
+"Project-Id-Version: WP QueuePress 2.7.5\n"
 "Report-Msgid-Bugs-To: https://bunnychase.net/\n"
 "POT-Creation-Date: 2026-05-10 00:00+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -15,6 +15,39 @@ msgstr ""
 "X-Domain: wp-queuepress\n"
 
 msgid "WP QueuePress"
+msgstr ""
+
+msgid "Fill expiration"
+msgstr ""
+
+msgid "15 days"
+msgstr ""
+
+msgid "30 days"
+msgstr ""
+
+msgid "Number of days after a Fill post is queued before its scheduled expiration date. The daily maintenance promotes it to Media on that local date."
+msgstr ""
+
+msgid "Estimated Fill expiration: "
+msgstr ""
+
+msgid "This Fill post will expire on:"
+msgstr ""
+
+msgid "Confirm Fill expiration"
+msgstr ""
+
+msgid "Confirm Fill schedule"
+msgstr ""
+
+msgid "QueuePress Fill expiration"
+msgstr ""
+
+msgid "This Fill post stays outside the Media queue until its expiration date or a Media calendar gap is found."
+msgstr ""
+
+msgid "Review Fill expiration"
 msgstr ""
 
 msgid "A lightweight editorial scheduling plugin for WordPress that allows creators and publishers to configure reusable weekly publishing slots, visualize scheduled and published content in a clean calendar interface, and identify free publishing spaces quickly."

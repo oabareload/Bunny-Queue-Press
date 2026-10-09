@@ -199,6 +199,15 @@ final class Settings_Page {
 								<small><?php echo esc_html__('When paused, editor queue actions will not assign new publishing slots. Existing scheduled posts are not changed.', 'wp-queuepress'); ?></small>
 							</span>
 						</label>
+
+						<label class="qps-field">
+							<span><?php echo esc_html__('Fill expiration', 'wp-queuepress'); ?></span>
+							<select name="<?php echo esc_attr(Preferences::OPTION_NAME); ?>[fill_days]">
+								<option value="15" <?php selected($settings['fill_days'], 15); ?>><?php echo esc_html__('15 days', 'wp-queuepress'); ?></option>
+								<option value="30" <?php selected($settings['fill_days'], 30); ?>><?php echo esc_html__('30 days', 'wp-queuepress'); ?></option>
+							</select>
+							<small><?php echo esc_html__('Number of days after a Fill post is queued before its scheduled expiration date. The daily maintenance promotes it to Media on that local date.', 'wp-queuepress'); ?></small>
+						</label>
 					</section>
 				</div>
 

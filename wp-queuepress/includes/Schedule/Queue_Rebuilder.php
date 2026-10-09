@@ -39,7 +39,7 @@ final class Queue_Rebuilder {
      */
     public function compute_and_persist_plan(string $calendar = 'immediate'): array {
         $calendar = 'media' === $calendar ? 'media' : 'immediate';
-        $relevances = 'media' === $calendar ? array('media', 'fill') : array('immediate');
+        $relevances = 'media' === $calendar ? array('media') : array('immediate');
         $timezone = wp_timezone();
         $now = new DateTimeImmutable('now', $timezone);
 
@@ -140,8 +140,12 @@ final class Queue_Rebuilder {
      * @return array<int,array<string,mixed>> Plan items: post_id, old_date, new_date.
      */
     public function compute_add_first_preview(int $post_id, string $relevance = 'media'): array {
+        if ('fill' === $relevance) {
+            return array();
+        }
+
         $calendar = 'immediate' === $relevance ? 'immediate' : 'media';
-        $relevances = 'immediate' === $calendar ? array('immediate') : array('media', 'fill');
+        $relevances = 'immediate' === $calendar ? array('immediate') : array('media');
         $new_post = get_post($post_id);
 
         if (! $new_post instanceof WP_Post) {
@@ -258,14 +262,14 @@ final class Queue_Rebuilder {
 
         $relevance_a = (string) get_post_meta($post_a_id, '_wp_queuepress_relevance', true);
         $relevance_b = (string) get_post_meta($post_b_id, '_wp_queuepress_relevance', true);
-        if (! in_array($relevance_a, array('immediate', 'media', 'fill'), true)
-            || ! in_array($relevance_b, array('immediate', 'media', 'fill'), true)
+        if (! in_array($relevance_a, array('immediate', 'media'), true)
+            || ! in_array($relevance_b, array('immediate', 'media'), true)
             || ('immediate' === $relevance_a) !== ('immediate' === $relevance_b)) {
             return array();
         }
 
         $calendar = 'immediate' === $relevance_a ? 'immediate' : 'media';
-        $relevances = 'immediate' === $calendar ? array('immediate') : array('media', 'fill');
+        $relevances = 'immediate' === $calendar ? array('immediate') : array('media');
         $query = new \WP_Query(
             array(
                 'post_type' => $post_a->post_type,
@@ -321,8 +325,12 @@ final class Queue_Rebuilder {
      * @return array<int,array<string,mixed>> Rebuild plan items.
      */
     public function compute_add_first_plan(int $post_id, string $relevance = 'media'): array {
+        if ('fill' === $relevance) {
+            return array();
+        }
+
         $calendar = 'immediate' === $relevance ? 'immediate' : 'media';
-        $relevances = 'immediate' === $calendar ? array('immediate') : array('media', 'fill');
+        $relevances = 'immediate' === $calendar ? array('immediate') : array('media');
         // Flush object cache so we read the actual current DB state.
         clean_post_cache($post_id);
         $new_post = get_post($post_id);
@@ -384,6 +392,52 @@ final class Queue_Rebuilder {
         }
 
         return $plan;
+    }
+
+    /**
+     * Finds the earliest unoccupied configured Media slot before scheduled Media content.
+     * Free capacity after the last scheduled post is not treated as a gap.
+     */
+    public function find_first_media_gap(): ?DateTimeImmutable {
+        $timezone   = wp_timezone();
+        $now        = new DateTimeImmutable('now', $timezone);
+        $week_start = $this->get_start_of_week($now);
+        $search_end = $week_start->modify('+' . (self::SEARCH_WEEKS * 7 - 1) . ' days')->setTime(23, 59, 59);
+        $scheduled  = $this->post_query->get_posts_between('future', $now, $search_end, 'media', -1);
+
+        if (empty($scheduled)) {
+            return null;
+        }
+
+        $last_scheduled = null;
+        foreach ($scheduled as $post) {
+            $post_date = new DateTimeImmutable($post->post_date, $timezone);
+            if (null === $last_scheduled || $post_date > $last_scheduled) {
+                $last_scheduled = $post_date;
+            }
+        }
+
+        $published = $this->post_query->get_posts_between('publish', $week_start, $search_end, 'media', -1);
+        $occupied  = array_merge(
+            array((object) array('post_date' => '1970-01-01 00:00:00', 'ID' => 0)),
+            $scheduled,
+            $published
+        );
+
+        for ($week = 0; $week < self::SEARCH_WEEKS; $week++) {
+            $start = $week_start->modify('+' . $week . ' weeks');
+            $end   = $start->modify('+6 days')->setTime(23, 59, 59);
+            $free  = $this->schedule_calculator->get_free_slots($start, $end, $occupied, 'media');
+
+            foreach ($free as $slot) {
+                $slot_date = new DateTimeImmutable($slot['date'] . ' ' . $slot['time'], $timezone);
+                if ($slot_date > $now && $slot_date < $last_scheduled) {
+                    return $slot_date;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -523,7 +577,7 @@ final class Queue_Rebuilder {
         $week_start     = $this->get_start_of_week($now);
         $occupied_posts = array((object) array('post_date' => '1970-01-01 00:00:00', 'ID' => 0));
         $slots          = array();
-        $relevances     = 'immediate' === $calendar ? array('immediate') : array('media', 'fill');
+        $relevances     = 'immediate' === $calendar ? array('immediate') : array('media');
         $search_end     = $week_start->modify('+' . (self::SEARCH_WEEKS * 7 - 1) . ' days')->setTime(23, 59, 59);
         $published      = $this->post_query->get_posts_between('publish', $week_start, $search_end, $relevances, -1);
 

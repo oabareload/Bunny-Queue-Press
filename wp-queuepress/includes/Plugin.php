@@ -90,7 +90,7 @@ final class Plugin {
 		$editor_assets = new Editor_Assets();
 		$queue_api     = new Queue_Controller($queue_assigner, $queue_rebuilder);
 		$queue_commit  = new Queue_Commit_Handler($queue_assigner, $queue_rebuilder, $preferences);
-		$media_fill_maintenance = new Media_Fill_Maintenance($post_query, $queue_rebuilder);
+		$media_fill_maintenance = new Media_Fill_Maintenance($post_query, $queue_rebuilder, $queue_assigner);
 
 		// Run once-per-upgrade schema migrations.
 		( new \QueuePostScheduler\Buffer\Channel_Config() )->migrate_legacy_config();

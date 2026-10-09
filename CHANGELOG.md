@@ -1,5 +1,13 @@
 # Changelog
 
+### 2.7.5
+
+**Improved**
+- Added a Fill expiration interval setting (15 or 30 days, default 30) and schedule new Fill posts at that local site-timezone date, after the daily 04:00 maintenance.
+- Kept Fill posts out of Media slot occupancy and normal Media rebuilds until expiration or until a configured free slot exists before already scheduled Media content.
+- Updated daily maintenance to promote expired Fills into the next available Media slot and use the nearest-to-expiry Fill to cover one real Media gap; it does not rebuild the queue when no promotion is needed.
+- Preserved existing Fill dates when the expiration preference changes.
+
 ### 2.7.4
 
 **Improved**

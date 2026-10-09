@@ -310,6 +310,19 @@ final class Queue_Controller {
 		$post_id = (int) $request['id'];
 		$mode    = (string) $request['mode'];
 		$relevance = (string) $request['relevance'];
+		if ('fill' === $relevance) {
+			$due_date = $this->queue_assigner->get_fill_due_date();
+			return rest_ensure_response(
+				array(
+					'date'      => $due_date->format('Y-m-d'),
+					'time'      => $due_date->format('H:i'),
+					'iso'       => $due_date->format('Y-m-d\TH:i:s'),
+					'mode'      => $mode,
+					'relevance' => $relevance,
+				)
+			);
+		}
+
 		$slot    = 'add_first' === $mode
 			? $this->queue_assigner->find_first_queue_slot($relevance)
 			: $this->queue_assigner->find_next_slot($post_id, $relevance);
@@ -352,6 +365,21 @@ final class Queue_Controller {
 	public function get_add_first_preview(\WP_REST_Request $request) {
 		$post_id  = (int) $request['id'];
 		$timezone = wp_timezone();
+		if ('fill' === (string) $request['relevance']) {
+			$post     = get_post($post_id);
+			$due_date = $this->queue_assigner->get_fill_due_date();
+			return rest_ensure_response(
+				array(
+					'new_post' => array(
+						'id'             => $post_id,
+						'title'          => $post instanceof \WP_Post ? get_the_title($post) : '',
+						'new_date'       => $due_date->format('Y-m-d\TH:i:s'),
+						'new_date_label' => $due_date->format('D, M j Y \\a\\t g:i A'),
+					),
+					'affected' => array(),
+				)
+			);
+		}
 
 		// compute_add_first_plan requires the post to already be `future`.
 		// At preview time the post is still a draft, so we simulate: build

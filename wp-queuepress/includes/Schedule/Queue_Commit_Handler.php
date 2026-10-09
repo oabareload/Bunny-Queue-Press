@@ -162,7 +162,9 @@ final class Queue_Commit_Handler {
 		$this->is_applying = true;
 
 		try {
-			if ('add_first' === $mode) {
+			if ('fill' === $relevance) {
+				$this->commit_fill($post_id);
+			} elseif ('add_first' === $mode) {
 				$plan = $this->queue_rebuilder->compute_add_first_plan($post_id, $relevance);
 				error_log('[QueuePress] add_first plan for post ' . $post_id . ': ' . wp_json_encode($plan));
 				$result = $this->queue_rebuilder->apply_plan($plan);
@@ -173,6 +175,25 @@ final class Queue_Commit_Handler {
 		} finally {
 			$this->is_applying = false;
 		}
+	}
+
+	/** Schedules a new Fill at its configured local expiration date, not in a Media slot. */
+	private function commit_fill(int $post_id): void {
+		$post = get_post($post_id);
+		if (! $post instanceof \WP_Post) {
+			return;
+		}
+
+		$due_date = $this->queue_assigner->get_fill_due_date();
+		$this->queue_rebuilder->apply_plan(
+			array(
+				array(
+					'post_id'  => $post_id,
+					'old_date' => (string) $post->post_date,
+					'new_date' => $due_date->format(DATE_ATOM),
+				),
+			)
+		);
 	}
 
 	/**

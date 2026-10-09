@@ -255,6 +255,7 @@
 		// ── Derived display values ────────────────────────────────────────────────
 
 		var isQueueMode = ('add_to_queue' === mode || 'add_first' === mode);
+		var isFill      = 'fill' === relevance;
 		var slotLabel   = slotInfo ? formatSlotLabel(slotInfo.date, slotInfo.time) : '';
 
 		var helpText = __('Choose a relevance and queue mode for this post.', 'wp-queuepress');
@@ -263,9 +264,11 @@
 		} else if (errorMessage) {
 			helpText = errorMessage;
 		} else if (slotLabel) {
-			var prefix = 'add_first' === mode
-				? __('Estimated first slot: ', 'wp-queuepress')
-				: __('Estimated slot: ', 'wp-queuepress');
+			var prefix = isFill
+				? __('Estimated Fill expiration: ', 'wp-queuepress')
+				: ('add_first' === mode
+					? __('Estimated first slot: ', 'wp-queuepress')
+					: __('Estimated slot: ', 'wp-queuepress'));
 			helpText = prefix + slotLabel;
 		}
 
@@ -283,7 +286,7 @@
 					initialOpen: true
 				},
 				createElement('p', { style: { margin: '0 0 4px' } },
-					__('This post will be scheduled at:', 'wp-queuepress')
+					isFill ? __('This Fill post will expire on:', 'wp-queuepress') : __('This post will be scheduled at:', 'wp-queuepress')
 				),
 				createElement('p', { style: { fontWeight: 600, margin: '0 0 8px' } }, slotLabel),
 				createElement('p', { style: { color: '#757575', fontSize: '12px', margin: 0 } },
@@ -298,13 +301,13 @@
 			? createElement(
 				Modal,
 				{
-					title: __('Confirm Queue Rebuild (Add First)', 'wp-queuepress'),
+					title: isFill ? __('Confirm Fill expiration', 'wp-queuepress') : __('Confirm Queue Rebuild (Add First)', 'wp-queuepress'),
 					onRequestClose: onModalCancel,
 					size: 'medium'
 				},
 				// New post row
 				createElement('p', { style: { marginBottom: '4px', fontWeight: 600 } },
-					__('Your post will be scheduled at:', 'wp-queuepress')
+					isFill ? __('This Fill post will expire on:', 'wp-queuepress') : __('Your post will be scheduled at:', 'wp-queuepress')
 				),
 				createElement('p', { style: { marginBottom: '16px' } },
 					addFirstPreview.new_post.new_date_label
@@ -352,7 +355,7 @@
 					'div',
 					{ style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } },
 					createElement(Button, { variant: 'primary', onClick: onModalConfirm },
-						__('Confirm & Schedule', 'wp-queuepress')
+						isFill ? __('Confirm Fill schedule', 'wp-queuepress') : __('Confirm & Schedule', 'wp-queuepress')
 					),
 					createElement(Button, { variant: 'tertiary', onClick: onModalCancel },
 						__('Cancel', 'wp-queuepress')
@@ -371,20 +374,20 @@
 				PluginPrePublishPanel,
 				{
 					name: 'wp-queuepress-addfirst-prepublish',
-					title: __('QueuePress Add First', 'wp-queuepress'),
+					title: isFill ? __('QueuePress Fill expiration', 'wp-queuepress') : __('QueuePress Add First', 'wp-queuepress'),
 					initialOpen: true
 				},
 				createElement('p', { style: { margin: '0 0 4px' } },
-					__('This post will go first in the queue. All scheduled posts will shift forward.', 'wp-queuepress')
+					isFill ? __('This Fill post stays outside the Media queue until its expiration date or a Media calendar gap is found.', 'wp-queuepress') : __('This post will go first in the queue. All scheduled posts will shift forward.', 'wp-queuepress')
 				),
 				createElement('p', { style: { fontWeight: 600, margin: '0 0 8px' } },
-					__('Estimated first slot: ', 'wp-queuepress') + slotLabel
+					(isFill ? __('Estimated Fill expiration: ', 'wp-queuepress') : __('Estimated first slot: ', 'wp-queuepress')) + slotLabel
 				),
 				isLoading
 					? createElement(Spinner, null)
 					: createElement(Button,
 						{ variant: 'primary', onClick: onScheduleAddFirst, style: { marginTop: '4px' } },
-						__('Review & Confirm Queue Rebuild', 'wp-queuepress')
+						isFill ? __('Review Fill expiration', 'wp-queuepress') : __('Review & Confirm Queue Rebuild', 'wp-queuepress')
 					)
 			)
 			: null;

@@ -1,6 +1,6 @@
 # Bunny Queue Press
 
-Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. Version 2.7.4 presents recurring Immediate and Media slots without week navigation, offers per-calendar rebuild previews on the Calendar screen, and shows editorial Drafts, Future, and Published posts in separate Pipeline columns. Relevance badges use consistent Immediate, Media, and Fill colors; posts without valid relevance remain unclassified. Buffer jobs use `shareNow` for Immediate posts and `addToQueue` for Media and Fill posts, leaving Buffer to choose its next available queue time. QueuePress assigns and rebuilds native WordPress scheduled posts; WordPress remains responsible for publishing them. The plugin also provides an optional Buffer integration.
+Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. Version 2.7.5 presents recurring Immediate and Media slots without week navigation, offers per-calendar rebuild previews on the Calendar screen, and shows editorial Drafts, Future, and Published posts in separate Pipeline columns. Fill posts stay outside the Media queue until their configurable 15- or 30-day expiration or a real gap before scheduled Media content; the daily maintenance promotes them using the WordPress site timezone. Relevance badges use consistent Immediate, Media, and Fill colors; posts without valid relevance remain unclassified. Buffer jobs use `shareNow` for Immediate posts and `addToQueue` for Media and Fill posts. WordPress remains responsible for publishing scheduled posts.
 
 ## Plugin metadata
 

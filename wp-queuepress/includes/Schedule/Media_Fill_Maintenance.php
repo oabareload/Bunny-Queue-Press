@@ -23,10 +23,12 @@ final class Media_Fill_Maintenance {
 
 	private Post_Query $post_query;
 	private Queue_Rebuilder $queue_rebuilder;
+	private Queue_Assigner $queue_assigner;
 
-	public function __construct(Post_Query $post_query, Queue_Rebuilder $queue_rebuilder) {
+	public function __construct(Post_Query $post_query, Queue_Rebuilder $queue_rebuilder, Queue_Assigner $queue_assigner) {
 		$this->post_query      = $post_query;
 		$this->queue_rebuilder = $queue_rebuilder;
+		$this->queue_assigner  = $queue_assigner;
 	}
 
 	/** Registers the daily event and its callback. */
@@ -51,25 +53,73 @@ final class Media_Fill_Maintenance {
 		wp_schedule_single_event($next->getTimestamp(), self::HOOK);
 	}
 
-	/** Promotes Fills dated today or earlier, then rebuilds only the media calendar. */
+	/** Promotes expired Fills and uses one unexpired Fill only to cover a real Media gap. */
 	public function run(): void {
 		$this->schedule_next_run();
 
 		$timezone = wp_timezone();
 		$today    = new DateTimeImmutable('today', $timezone);
-		$end      = $today->setTime(23, 59, 59);
-		$fills    = $this->post_query->get_posts_between('future', new DateTimeImmutable('1970-01-01 00:00:00', $timezone), $end, 'fill', -1);
+		$start    = new DateTimeImmutable('1970-01-01 00:00:00', $timezone);
+		$end      = $today->modify('+' . (52 * 7 - 1) . ' days')->setTime(23, 59, 59);
+		$fills    = $this->post_query->get_posts_between('future', $start, $end, 'fill', -1);
+		$unexpired = array();
+		usort(
+			$fills,
+			static function (\WP_Post $a, \WP_Post $b): int {
+				$date_order = strcmp($a->post_date, $b->post_date);
+				return 0 !== $date_order ? $date_order : ((int) $a->ID <=> (int) $b->ID);
+			}
+		);
 
-		if (empty($fills)) {
+		foreach ($fills as $post) {
+			$fill_date = new DateTimeImmutable($post->post_date, $timezone);
+			if ($fill_date->format('Y-m-d') <= $today->format('Y-m-d')) {
+				$this->promote_fill((int) $post->ID, null);
+			} else {
+				$unexpired[] = $post;
+			}
+		}
+
+		if (empty($unexpired)) {
 			return;
 		}
 
-		foreach ($fills as $post) {
-			update_post_meta((int) $post->ID, '_wp_queuepress_relevance', 'media');
+		$gap = $this->queue_rebuilder->find_first_media_gap();
+		if (null === $gap) {
+			return;
 		}
 
-		$plan = $this->queue_rebuilder->compute_and_persist_plan('media');
-		$this->queue_rebuilder->apply_plan($plan['plan'] ?? array());
-		delete_option('qps_pending_rebuild_media');
+		$this->promote_fill((int) $unexpired[0]->ID, $gap);
+	}
+
+	/** Assigns a Fill to a valid Media slot, then removes its Fill classification. */
+	private function promote_fill(int $post_id, ?DateTimeImmutable $target): bool {
+		clean_post_cache($post_id);
+		$post = get_post($post_id);
+		if (! $post instanceof \WP_Post || 'future' !== $post->post_status || 'fill' !== get_post_meta($post_id, '_wp_queuepress_relevance', true)) {
+			return false;
+		}
+
+		$target = $target ?: $this->queue_assigner->find_next_slot($post_id, 'media');
+		if (! $target instanceof DateTimeImmutable) {
+			return false;
+		}
+
+		$result = $this->queue_rebuilder->apply_plan(
+			array(
+				array(
+					'post_id'  => $post_id,
+					'old_date' => (string) $post->post_date,
+					'new_date' => $target->format(DATE_ATOM),
+				),
+			)
+		);
+
+		if (empty($result['applied'])) {
+			return false;
+		}
+
+		update_post_meta($post_id, '_wp_queuepress_relevance', 'media');
+		return true;
 	}
 }
