@@ -395,49 +395,47 @@ final class Queue_Rebuilder {
     }
 
     /**
-     * Finds the earliest unoccupied configured Media slot before scheduled Media content.
-     * Free capacity after the last scheduled post is not treated as a gap.
+     * Finds unoccupied configured Media slots strictly for the current local day.
+     * The optional candidate horizon is handled separately by Fill maintenance.
+     *
+     * @return array<int,DateTimeImmutable>
      */
-    public function find_first_media_gap(): ?DateTimeImmutable {
-        $timezone   = wp_timezone();
-        $now        = new DateTimeImmutable('now', $timezone);
-        $week_start = $this->get_start_of_week($now);
-        $search_end = $week_start->modify('+' . (self::SEARCH_WEEKS * 7 - 1) . ' days')->setTime(23, 59, 59);
-        $scheduled  = $this->post_query->get_posts_between('future', $now, $search_end, 'media', -1);
+    public function find_media_gaps_today(): array {
+        $timezone = wp_timezone();
+        $now      = new DateTimeImmutable('now', $timezone);
+        $today    = $now->setTime(0, 0, 0);
+        $day_end  = $today->setTime(23, 59, 59);
 
-        if (empty($scheduled)) {
-            return null;
-        }
-
-        $last_scheduled = null;
-        foreach ($scheduled as $post) {
-            $post_date = new DateTimeImmutable($post->post_date, $timezone);
-            if (null === $last_scheduled || $post_date > $last_scheduled) {
-                $last_scheduled = $post_date;
-            }
-        }
-
-        $published = $this->post_query->get_posts_between('publish', $week_start, $search_end, 'media', -1);
+        $scheduled = $this->post_query->get_posts_between('future', $today, $day_end, 'media', -1);
+        $published = $this->post_query->get_posts_between('publish', $today, $day_end, 'media', -1);
         $occupied  = array_merge(
             array((object) array('post_date' => '1970-01-01 00:00:00', 'ID' => 0)),
             $scheduled,
             $published
         );
 
-        for ($week = 0; $week < self::SEARCH_WEEKS; $week++) {
-            $start = $week_start->modify('+' . $week . ' weeks');
-            $end   = $start->modify('+6 days')->setTime(23, 59, 59);
-            $free  = $this->schedule_calculator->get_free_slots($start, $end, $occupied, 'media');
+        $free = $this->schedule_calculator->get_free_slots($today, $day_end, $occupied, 'media');
+        $gaps = array();
 
-            foreach ($free as $slot) {
-                $slot_date = new DateTimeImmutable($slot['date'] . ' ' . $slot['time'], $timezone);
-                if ($slot_date > $now && $slot_date < $last_scheduled) {
-                    return $slot_date;
-                }
+        foreach ($free as $slot) {
+            $slot_date = new DateTimeImmutable($slot['date'] . ' ' . $slot['time'], $timezone);
+            if ($slot_date > $now && $slot_date->format('Y-m-d') === $today->format('Y-m-d')) {
+                $gaps[] = $slot_date;
             }
         }
 
-        return null;
+        return $gaps;
+    }
+
+    /** Compatibility alias; Fill maintenance must use only today's gaps. */
+    public function find_media_gaps(int $limit_days = 30): array {
+        return $this->find_media_gaps_today();
+    }
+
+    /** Finds the earliest unoccupied configured Media slot for today. */
+    public function find_first_media_gap(): ?DateTimeImmutable {
+        $gaps = $this->find_media_gaps_today();
+        return $gaps[0] ?? null;
     }
 
     /**

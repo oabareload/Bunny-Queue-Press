@@ -1,5 +1,12 @@
 # Changelog
 
+### 2.7.6
+
+**Fixed**
+- Corrected daily Fill maintenance so eligible Fill posts can cover multiple free Media slots on the current local day, prioritized by expiration date.
+- Limited Fill maintenance destinations strictly to today and prevented assignments to tomorrow or any later day.
+- Preserved the 30-day Fill candidate horizon, the separation between Immediate and Media calendars, configured slot times, and existing publication eligibility rules.
+
 ### 2.7.5
 
 **Improved**
