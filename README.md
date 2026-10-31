@@ -1,6 +1,6 @@
 # Bunny Queue Press
 
-Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. Version 2.7.6 presents recurring Immediate and Media slots without week navigation, offers per-calendar rebuild previews on the Calendar screen, and shows editorial Drafts, Future, and Published posts in separate Pipeline columns. Fill posts remain eligible for their configurable 15- or 30-day expiration horizon; daily maintenance at 04:00 uses eligible Fill posts, ordered by expiration, only to cover free Media slots on the current local day. Fill posts and the maintenance process never assign publications to tomorrow or later dates. Relevance badges use consistent Immediate, Media, and Fill colors; posts without valid relevance remain unclassified. Buffer jobs use `shareNow` for Immediate posts and `addToQueue` for Media and Fill posts. WordPress remains responsible for publishing scheduled posts.
+Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. Version 2.7.7 presents recurring Immediate and Media slots without week navigation, offers per-calendar rebuild previews on the Calendar screen, and shows editorial Drafts, Future, and Published posts in separate Pipeline columns. Fill posts remain eligible for their configurable 15- or 30-day expiration horizon; daily maintenance at 04:00 uses eligible Fill posts, ordered by expiration, only to cover free Media slots on the current local day. Fill posts and the maintenance process never assign publications to tomorrow or later dates. Relevance badges use consistent Immediate, Media, and Fill colors; posts without valid relevance remain unclassified. Buffer jobs use `shareNow` for Immediate posts and `addToQueue` for Media and Fill posts. WordPress remains responsible for publishing scheduled posts. Links to BunnyChase sent to Buffer are tagged automatically with UTM parameters for each social platform.
 
 ## Plugin metadata
 
@@ -81,6 +81,37 @@ Bunny-Queue-Press/
 - English is the default fallback language.
 - Translation files are prepared in `languages/`.
 - All user-facing strings use the `wp-queuepress` text domain.
+
+---
+
+## Automatic UTM tagging
+
+Since 2.7.7, QueuePress adds UTM parameters to BunnyChase links before sending the content to Buffer, so Google Analytics 4 can identify the traffic coming from each social network.
+
+| Platform  | `utm_source` | `utm_medium` |
+| --------- | ------------ | ------------ |
+| X         | `x`          | `social`     |
+| Facebook  | `facebook`   | `social`     |
+| Pinterest | `pinterest`  | `social`     |
+| Threads   | `threads`    | `social`     |
+| Instagram | `instagram`  | `social`     |
+
+`utm_campaign` is the WordPress post slug, normalized to lowercase letters, digits, `-`, and `_`.
+
+Example: `https://bunnychase.net/figura-anime/` sent to Facebook becomes `https://bunnychase.net/figura-anime/?utm_source=facebook&utm_medium=social&utm_campaign=figura-anime`.
+
+### Rules
+
+- Only links on `bunnychase.net` and its subdomains are tagged. External links, media files (`/wp-content/`, images, PDFs), and WordPress system paths are never modified.
+- Tagging applies only to the copy of the link prepared for the social network. The original post URL and the article content stored in WordPress are never changed.
+- It covers the post permalink (captions, link cards, Pinterest pin URL, truncated-thread notice) and BunnyChase links written in the post content.
+- Existing query parameters and `#fragments` are preserved.
+- Existing `utm_source`, `utm_medium`, and `utm_campaign` values are replaced with those of the target platform, so they are never duplicated. Other parameters such as `utm_content` or `utm_term` are kept.
+- The logic is centralized in `Publisher_Commons::tag_url()`; each platform's `utm_source` is defined in `Platform_Registry`.
+
+### Buffer settings
+
+QueuePress does not change Buffer settings. If a Buffer channel has its own Google Analytics campaign tracking enabled, Buffer may add or override UTM parameters; keep it disabled for BunnyChase channels and verify the final link with a test post.
 
 ---
 

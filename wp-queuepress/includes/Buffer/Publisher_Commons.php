@@ -20,6 +20,16 @@ if (! defined('ABSPATH')) {
 
 final class Publisher_Commons {
 
+    /**
+     * Domain whose links (and legitimate subdomains) receive UTM tagging.
+     */
+    private const UTM_DOMAIN = 'bunnychase.net';
+
+    /**
+     * utm_medium sent for every social platform.
+     */
+    private const UTM_MEDIUM = 'social';
+
     public static function is_nsfw(WP_Post $post): bool {
         $tags = get_the_tags($post->ID);
         if (empty($tags) || ! is_array($tags)) {
@@ -41,18 +51,193 @@ final class Publisher_Commons {
      * using get_sample_permalink() to generate a preview-friendly URL.
      *
      * @param WP_Post $post
+     * @param string  $platform Optional Platform_Registry slug. When given, the returned
+     *                          URL is the UTM-tagged copy for that platform.
      * @return string
      */
-    public static function get_pretty_post_url(WP_Post $post): string {
+    public static function get_pretty_post_url(WP_Post $post, string $platform = ''): string {
         if ('publish' === $post->post_status) {
-            return (string) get_permalink($post);
+            $url = (string) get_permalink($post);
+            return '' === $platform ? $url : self::tag_post_url($url, $post, $platform);
         }
 
         $sample_permalink = get_sample_permalink($post->ID);
         $base_structure = $sample_permalink[0];
         $post_slug = $sample_permalink[1];
 
-        return str_replace('%postname%', $post_slug, $base_structure);
+        $url = str_replace('%postname%', $post_slug, $base_structure);
+
+        return '' === $platform ? $url : self::tag_post_url($url, $post, $platform);
+    }
+
+    /**
+     * Returns the UTM-tagged copy of a post URL for a platform.
+     *
+     * The post itself and its stored permalink are never modified; only the
+     * returned string differs. utm_campaign is the normalized post slug.
+     *
+     * @param string  $url      URL to tag.
+     * @param WP_Post $post     Post whose slug becomes utm_campaign.
+     * @param string  $platform Platform_Registry slug (e.g. 'twitter').
+     * @return string
+     */
+    public static function tag_post_url(string $url, WP_Post $post, string $platform): string {
+        return self::tag_url($url, $platform, self::campaign_slug($post));
+    }
+
+    /**
+     * Normalizes a post slug for use as utm_campaign.
+     *
+     * Uses the real post_name (decoded, lower-cased, anything other than
+     * letters, digits, '_' and '-' collapsed to '-'). Falls back to the title
+     * only when the post has no slug yet. Returns '' when nothing usable remains.
+     *
+     * @param WP_Post $post
+     * @return string
+     */
+    public static function campaign_slug(WP_Post $post): string {
+        $slug = (string) $post->post_name;
+        if ('' === $slug) {
+            $slug = sanitize_title((string) get_the_title($post));
+        }
+
+        $slug = mb_strtolower(rawurldecode($slug), 'UTF-8');
+        $slug = (string) preg_replace('/[^\p{L}\p{N}_-]+/u', '-', $slug);
+        $slug = (string) preg_replace('/-{2,}/', '-', $slug);
+
+        return trim($slug, '-');
+    }
+
+    /**
+     * Adds utm_source / utm_medium / utm_campaign to a BunnyChase URL.
+     *
+     * Rules:
+     *   - Only http(s) URLs on bunnychase.net (or its subdomains) are tagged;
+     *     anything else, and asset/system paths, is returned untouched.
+     *   - Existing query parameters are kept verbatim and in order.
+     *   - Existing utm_source / utm_medium / utm_campaign are replaced (matched
+     *     case-insensitively) so the URL never ends with duplicates. Other utm_*
+     *     parameters (utm_content, utm_term, utm_id) are preserved. An empty
+     *     $campaign leaves any existing utm_campaign as it is.
+     *   - The fragment (#...) is preserved exactly.
+     *
+     * @param string $url      URL to tag.
+     * @param string $platform Platform_Registry slug.
+     * @param string $campaign Normalized campaign (see campaign_slug()).
+     * @return string
+     */
+    public static function tag_url(string $url, string $platform, string $campaign): string {
+        $source = Platform_Registry::utm_source($platform);
+        if ('' === $source || ! self::is_taggable_url($url)) {
+            return $url;
+        }
+
+        $fragment = '';
+        $hash_pos = strpos($url, '#');
+        if (false !== $hash_pos) {
+            $fragment = substr($url, $hash_pos);
+            $url      = substr($url, 0, $hash_pos);
+        }
+
+        $query = '';
+        $q_pos = strpos($url, '?');
+        if (false !== $q_pos) {
+            $query = substr($url, $q_pos + 1);
+            $url   = substr($url, 0, $q_pos);
+        }
+
+        $replace = array('utm_source', 'utm_medium');
+        if ('' !== $campaign) {
+            $replace[] = 'utm_campaign';
+        }
+
+        $pairs = array();
+        if ('' !== $query) {
+            foreach (explode('&', $query) as $pair) {
+                if ('' === $pair) { continue; }
+                $name = strtolower(rawurldecode((string) strstr($pair . '=', '=', true)));
+                if (in_array($name, $replace, true)) { continue; }
+                $pairs[] = $pair;
+            }
+        }
+
+        $pairs[] = 'utm_source=' . rawurlencode($source);
+        $pairs[] = 'utm_medium=' . self::UTM_MEDIUM;
+        if ('' !== $campaign) {
+            $pairs[] = 'utm_campaign=' . rawurlencode($campaign);
+        }
+
+        return $url . '?' . implode('&', $pairs) . $fragment;
+    }
+
+    /**
+     * Tags every taggable BunnyChase URL found in plain text.
+     *
+     * Used on caption bodies so internal links written in the content get the
+     * same treatment as the permalink. Returns the text unchanged (without
+     * running a regex) when it does not mention the domain at all.
+     *
+     * @param string $text     Plain text (HTML already stripped).
+     * @param string $platform Platform_Registry slug.
+     * @param string $campaign Normalized campaign.
+     * @return string
+     */
+    public static function tag_text_urls(string $text, string $platform, string $campaign): string {
+        if ('' === $text || false === stripos($text, self::UTM_DOMAIN)) {
+            return $text;
+        }
+
+        return (string) preg_replace_callback(
+            '#https?://[^\s<>"]+#i',
+            static function (array $m) use ($platform, $campaign): string {
+                $match = $m[0];
+                $trail = '';
+                // Sentence punctuation glued to the URL is not part of it.
+                if (preg_match('#[.,;:!?)\\]}\'"]+$#', $match, $t)) {
+                    $trail = $t[0];
+                    $match = substr($match, 0, -strlen($trail));
+                }
+                return self::tag_url($match, $platform, $campaign) . $trail;
+            },
+            $text
+        );
+    }
+
+    /**
+     * Whether a URL is a BunnyChase page that should carry UTM tags.
+     *
+     * Host must be exactly the domain or a dot-delimited subdomain of it
+     * (so evilbunnychase.net and bunnychase.net.evil.com are rejected).
+     * Media, core and REST paths are not pages and are never tagged.
+     *
+     * @param string $url
+     * @return bool
+     */
+    private static function is_taggable_url(string $url): bool {
+        if (! preg_match('#^https?://#i', $url)) {
+            return false;
+        }
+
+        $host = parse_url($url, PHP_URL_HOST);
+        if (! is_string($host) || '' === $host) {
+            return false;
+        }
+
+        $host   = rtrim(strtolower($host), '.');
+        $suffix = '.' . self::UTM_DOMAIN;
+        if (self::UTM_DOMAIN !== $host && substr($host, -strlen($suffix)) !== $suffix) {
+            return false;
+        }
+
+        $path = (string) parse_url($url, PHP_URL_PATH);
+        if (preg_match('#^/(?:wp-content|wp-includes|wp-admin|wp-json)(?:/|$)#i', $path)) {
+            return false;
+        }
+        if (preg_match('#\.(?:jpe?g|png|gif|webp|avif|svg|ico|bmp|mp4|webm|mov|mp3|pdf|zip|css|js)$#i', $path)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -301,6 +486,9 @@ final class Publisher_Commons {
      *  - 'force_source'      => 'excerpt'|'full_post'|null (default null → 'full_post')
      *  - 'post_style'        => string|null
      *  - 'margin'            => float (default 0.10)
+     *  - 'platform'          => string (optional) Platform_Registry slug. When set,
+     *                           the permalink and any BunnyChase URL in the body are
+     *                           UTM-tagged for that platform before length is measured.
      *  - 'prepend_content'   => string (optional) Raw text to prepend to the
      *                           body content before the smart-truncate step.
      *                           Used by Instagram Social Post to combine
@@ -320,6 +508,7 @@ final class Publisher_Commons {
         $force_source = $options['force_source'] ?? null;
         $post_style = $options['post_style'] ?? null;
         $margin = isset($options['margin']) ? (float) $options['margin'] : 0.10;
+        $platform = isset($options['platform']) ? (string) $options['platform'] : '';
 
         if (in_array($force_source, array('excerpt', 'full_post'), true)) {
             $content_source = $force_source;
@@ -329,7 +518,7 @@ final class Publisher_Commons {
 
         // Decode HTML entities in the title (e.g. &#8211; → –, &#8217; → ').
         $title = html_entity_decode((string) get_the_title($post), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $permalink = self::get_pretty_post_url($post);
+        $permalink = self::get_pretty_post_url($post, $platform);
 
         $raw_content = '';
         if ('excerpt' === $content_source) {
@@ -418,6 +607,9 @@ final class Publisher_Commons {
         // hashtags block. They stay exactly where the author wrote them in
         // the content. If smart_truncate cuts a hashtag, that's accepted.
         $clean_content = $raw_content;
+        if ('' !== $platform) {
+            $clean_content = self::tag_text_urls($clean_content, $platform, self::campaign_slug($post));
+        }
 
         $effective_limit = $character_limit;
         if ($character_limit !== PHP_INT_MAX) {

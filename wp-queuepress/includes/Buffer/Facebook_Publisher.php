@@ -159,6 +159,7 @@ final class Facebook_Publisher {
                 'force_source'      => 'excerpt',
                 'include_permalink' => true,
                 'post_style'        => 'card_link',
+                'platform'          => 'facebook',
             )
         );
 
@@ -209,6 +210,7 @@ final class Facebook_Publisher {
                 'force_source'      => 'full_post',
                 'include_permalink' => true,
                 'margin'            => 0.10,
+                'platform'          => 'facebook',
             )
         );
 

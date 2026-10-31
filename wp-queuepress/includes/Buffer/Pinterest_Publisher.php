@@ -222,6 +222,7 @@ final class Pinterest_Publisher {
 				'force_source'      => 'excerpt',
 				'include_permalink' => false,
 				'margin'            => 0.10,
+				'platform'          => 'pinterest',
 			)
 		);
 
@@ -244,7 +245,7 @@ final class Pinterest_Publisher {
 			$title = mb_substr($title, 0, 99, 'UTF-8') . '…';
 		}
 
-		$url = Publisher_Commons::get_pretty_post_url($post);
+		$url = Publisher_Commons::get_pretty_post_url($post, 'pinterest');
 
 		$meta = array(
 			'detected_post_style' => 'social_post',

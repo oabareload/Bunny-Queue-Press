@@ -284,6 +284,7 @@ final class Instagram_Publisher {
 				'include_permalink' => true,
 				'margin'            => 0.10,
 				'prepend_content'   => $prepend,
+				'platform'          => 'instagram',
 			)
 		);
 	}

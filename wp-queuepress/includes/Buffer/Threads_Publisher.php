@@ -162,6 +162,7 @@ final class Threads_Publisher {
                 'force_source'      => 'excerpt',
                 'include_permalink' => true,
                 'post_style'        => 'card_link',
+                'platform'          => 'threads',
             )
         );
 
@@ -213,6 +214,7 @@ final class Threads_Publisher {
                 'include_title'     => false,
                 'include_permalink' => true,
                 'margin'            => 0.10,
+                'platform'          => 'threads',
             )
         );
 
@@ -228,6 +230,7 @@ final class Threads_Publisher {
                 'force_source'      => 'full_post',
                 'include_title'     => false,
                 'include_permalink' => false,
+                'platform'          => 'threads',
             )
         );
 
@@ -288,7 +291,7 @@ final class Threads_Publisher {
 
             $thread_texts[] = sprintf(
                 "🐰✨ Llegamos al límite del hilo.\n\nPuedes leer el resto del artículo aquí:\n%s",
-                get_permalink($post)
+                Publisher_Commons::tag_post_url((string) get_permalink($post), $post, 'threads')
             );
         }
 

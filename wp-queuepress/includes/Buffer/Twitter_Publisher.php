@@ -145,6 +145,7 @@ final class Twitter_Publisher {
                 'force_source'      => 'excerpt',
                 'include_permalink' => true,
                 'post_style'        => 'card_link',
+                'platform'          => 'twitter',
             )
         );
 
@@ -183,6 +184,7 @@ final class Twitter_Publisher {
                 'include_title'     => false,
                 'include_permalink' => true,
                 'margin'            => 0.10,
+                'platform'          => 'twitter',
             )
         );
 
@@ -198,6 +200,7 @@ final class Twitter_Publisher {
                 'force_source'      => 'full_post',
                 'include_title'     => false,
                 'include_permalink' => false,
+                'platform'          => 'twitter',
             )
         );
 
@@ -256,7 +259,7 @@ final class Twitter_Publisher {
 
             $thread_texts[] = sprintf(
                 "🐰✨ Llegamos al límite del hilo.\n\nPuedes leer el resto del artículo aquí:\n%s",
-                get_permalink($post)
+                Publisher_Commons::tag_post_url((string) get_permalink($post), $post, 'twitter')
             );
         }
 

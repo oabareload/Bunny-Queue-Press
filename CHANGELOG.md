@@ -1,5 +1,12 @@
 # Changelog
 
+### 2.7.7
+
+**Added**
+- Added automatic UTM tagging of BunnyChase links sent to Buffer. Each platform receives its own `utm_source` (X `x`, Facebook `facebook`, Pinterest `pinterest`, Threads `threads`, Instagram `instagram`), `utm_medium=social`, and `utm_campaign` set to the post slug.
+- Tagging applies only to the outgoing copy of links on `bunnychase.net` and its subdomains, including internal links written in the content. External links, media files, and the original WordPress URLs are never modified.
+- Existing query parameters and fragments are preserved; existing `utm_source`, `utm_medium`, and `utm_campaign` values are replaced so they are never duplicated.
+
 ### 2.7.6
 
 **Fixed**

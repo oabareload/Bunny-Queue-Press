@@ -316,7 +316,7 @@ GQL;
             return null;
         }
 
-        $url = Publisher_Commons::get_pretty_post_url($post);
+        $url = Publisher_Commons::get_pretty_post_url($post, $service);
 
         $title = '';
         $seo_keys = array('_yoast_wpseo_title', '_aioseo_title', 'rank_math_title');
