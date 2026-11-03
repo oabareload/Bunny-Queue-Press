@@ -86,6 +86,58 @@ final class Publisher_Commons {
     }
 
     /**
+     * Returns the UTM-tagged copy of a post URL, shortened through Nano URLs.
+     *
+     * Same as tag_post_url() followed by shorten_url(). Falls back to the
+     * tagged URL whenever shortening is unavailable or fails.
+     *
+     * @param string  $url      URL to tag and shorten.
+     * @param WP_Post $post     Post whose slug becomes utm_campaign.
+     * @param string  $platform Platform_Registry slug.
+     * @return string
+     */
+    public static function short_post_url(string $url, WP_Post $post, string $platform): string {
+        $tagged = self::tag_post_url($url, $post, $platform);
+
+        return $tagged === $url ? $url : self::shorten_url($tagged);
+    }
+
+    /**
+     * Shortens a BunnyChase page URL (UTM parameters included) with the Nano
+     * URLs PHP function. No HTTP requests and no storage of our own.
+     *
+     * Returns the original URL untouched when it is not a taggable BunnyChase
+     * page (so media and external links are never shortened), when
+     * nanourls_shorten() does not exist, when it throws, or when it returns
+     * anything other than an http(s) URL string.
+     *
+     * @param string $url Full URL to shorten.
+     * @return string Short URL, or $url on any failure.
+     */
+    private static function shorten_url(string $url): string {
+        if ('' === $url || ! function_exists('nanourls_shorten') || ! self::is_taggable_url($url)) {
+            return $url;
+        }
+
+        try {
+            $short = \nanourls_shorten($url);
+        } catch (\Throwable $e) {
+            return $url;
+        }
+
+        if (! is_string($short)) {
+            return $url;
+        }
+
+        $short = trim($short);
+        if ('' === $short || ! preg_match('#^https?://[^\s<>"]+$#i', $short)) {
+            return $url;
+        }
+
+        return $short;
+    }
+
+    /**
      * Normalizes a post slug for use as utm_campaign.
      *
      * Uses the real post_name (decoded, lower-cased, anything other than
@@ -197,7 +249,8 @@ final class Publisher_Commons {
                     $trail = $t[0];
                     $match = substr($match, 0, -strlen($trail));
                 }
-                return self::tag_url($match, $platform, $campaign) . $trail;
+                $tagged = self::tag_url($match, $platform, $campaign);
+                return ($tagged === $match ? $match : self::shorten_url($tagged)) . $trail;
             },
             $text
         );
@@ -519,6 +572,9 @@ final class Publisher_Commons {
         // Decode HTML entities in the title (e.g. &#8211; → –, &#8217; → ').
         $title = html_entity_decode((string) get_the_title($post), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $permalink = self::get_pretty_post_url($post, $platform);
+        if ($include_permalink && '' !== $platform && false !== strpos($permalink, 'utm_source=')) {
+            $permalink = self::shorten_url($permalink);
+        }
 
         $raw_content = '';
         if ('excerpt' === $content_source) {

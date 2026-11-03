@@ -1,6 +1,6 @@
 # Bunny Queue Press
 
-Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. Version 2.7.7 presents recurring Immediate and Media slots without week navigation, offers per-calendar rebuild previews on the Calendar screen, and shows editorial Drafts, Future, and Published posts in separate Pipeline columns. Fill posts remain eligible for their configurable 15- or 30-day expiration horizon; daily maintenance at 04:00 uses eligible Fill posts, ordered by expiration, only to cover free Media slots on the current local day. Fill posts and the maintenance process never assign publications to tomorrow or later dates. Relevance badges use consistent Immediate, Media, and Fill colors; posts without valid relevance remain unclassified. Buffer jobs use `shareNow` for Immediate posts and `addToQueue` for Media and Fill posts. WordPress remains responsible for publishing scheduled posts. Links to BunnyChase sent to Buffer are tagged automatically with UTM parameters for each social platform.
+Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. Version 2.7.8 presents recurring Immediate and Media slots without week navigation, offers per-calendar rebuild previews on the Calendar screen, and shows editorial Drafts, Future, and Published posts in separate Pipeline columns. Fill posts remain eligible for their configurable 15- or 30-day expiration horizon; daily maintenance at 04:00 uses eligible Fill posts, ordered by expiration, only to cover free Media slots on the current local day. Fill posts and the maintenance process never assign publications to tomorrow or later dates. Relevance badges use consistent Immediate, Media, and Fill colors; posts without valid relevance remain unclassified. Buffer jobs use `shareNow` for Immediate posts and `addToQueue` for Media and Fill posts. WordPress remains responsible for publishing scheduled posts. Links to BunnyChase sent to Buffer are tagged automatically with UTM parameters for each social platform and, when Nano URLs is active, shortened.
 
 ## Plugin metadata
 
@@ -112,6 +112,19 @@ Example: `https://bunnychase.net/figura-anime/` sent to Facebook becomes `https:
 ### Buffer settings
 
 QueuePress does not change Buffer settings. If a Buffer channel has its own Google Analytics campaign tracking enabled, Buffer may add or override UTM parameters; keep it disabled for BunnyChase channels and verify the final link with a test post.
+
+---
+
+## Short links (Nano URLs)
+
+Since 2.7.8, if the Nano URLs plugin is active in the same WordPress installation, QueuePress shortens the UTM-tagged BunnyChase links in the text sent to Buffer by calling `nanourls_shorten()` with the full URL. Visiting the short link redirects to the original destination, UTM parameters included. Nano URLs reuses existing short links for the same URL.
+
+- Applies to every platform published through Buffer: the post permalink in captions, BunnyChase links written in the content, and the truncated-thread notice.
+- Image and media URLs, external links, and the original WordPress URLs are never shortened or modified.
+- The Pinterest pin destination URL and link-card URLs keep the full UTM-tagged link.
+- If `nanourls_shorten()` does not exist, fails, or returns an invalid result, the full UTM-tagged link is used and publishing continues.
+- No REST API calls, external requests, tables, or options are added.
+- The logic is centralized in `Publisher_Commons`.
 
 ---
 

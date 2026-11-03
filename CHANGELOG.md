@@ -1,5 +1,11 @@
 # Changelog
 
+### 2.7.8
+
+**Added**
+- Added optional short links for BunnyChase page links sent to Buffer. When Nano URLs is active, the UTM-tagged link is shortened with `nanourls_shorten()` on every platform, including internal links written in the content and the truncated-thread notice.
+- Image and media URLs, external links, and the original WordPress URLs are never shortened or modified. If Nano URLs is unavailable or fails, the full UTM-tagged link is used and publishing continues.
+
 ### 2.7.7
 
 **Added**

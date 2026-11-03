@@ -259,7 +259,7 @@ final class Twitter_Publisher {
 
             $thread_texts[] = sprintf(
                 "🐰✨ Llegamos al límite del hilo.\n\nPuedes leer el resto del artículo aquí:\n%s",
-                Publisher_Commons::tag_post_url((string) get_permalink($post), $post, 'twitter')
+                Publisher_Commons::short_post_url((string) get_permalink($post), $post, 'twitter')
             );
         }
 
