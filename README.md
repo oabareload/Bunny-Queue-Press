@@ -1,6 +1,6 @@
 # Bunny Queue Press
 
-Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. Version 2.7.8 presents recurring Immediate and Media slots without week navigation, offers per-calendar rebuild previews on the Calendar screen, and shows editorial Drafts, Future, and Published posts in separate Pipeline columns. Fill posts remain eligible for their configurable 15- or 30-day expiration horizon; daily maintenance at 04:00 uses eligible Fill posts, ordered by expiration, only to cover free Media slots on the current local day. Fill posts and the maintenance process never assign publications to tomorrow or later dates. Relevance badges use consistent Immediate, Media, and Fill colors; posts without valid relevance remain unclassified. Buffer jobs use `shareNow` for Immediate posts and `addToQueue` for Media and Fill posts. WordPress remains responsible for publishing scheduled posts. Links to BunnyChase sent to Buffer are tagged automatically with UTM parameters for each social platform and, when Nano URLs is active, shortened.
+Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. Version 2.7.10 presents recurring Immediate and Media slots without week navigation, offers per-calendar rebuild previews on the Calendar screen, and shows editorial Drafts, Future, and Published posts in separate Pipeline columns. Fill posts remain eligible for their configurable 15- or 30-day expiration horizon; daily maintenance at 04:00 uses eligible Fill posts, ordered by expiration, only to cover free Media slots on the current local day. Fill posts and the maintenance process never assign publications to tomorrow or later dates. Relevance badges use consistent Immediate, Media, and Fill colors; posts without valid relevance remain unclassified. Buffer jobs use `shareNow` for Immediate posts and `addToQueue` for Media and Fill posts. WordPress remains responsible for publishing scheduled posts. Links to BunnyChase sent to Buffer are tagged automatically with UTM parameters for each social platform and, when Nano URLs is active, shortened. On X, the Excerpt thread post style publishes the full post excerpt as a connected thread.
 
 ## Plugin metadata
 
@@ -125,6 +125,21 @@ Since 2.7.8, if the Nano URLs plugin is active in the same WordPress installatio
 - If `nanourls_shorten()` does not exist, fails, or returns an invalid result, the full UTM-tagged link is used and publishing continues.
 - No REST API calls, external requests, tables, or options are added.
 - The logic is centralized in `Publisher_Commons`.
+
+---
+
+## Excerpt thread (X)
+
+Since 2.7.9, the **Post style** setting of an X channel offers **Excerpt thread** next to Social post and Card link. It is available only for X. The structure described below applies from 2.7.10.
+
+- It publishes the full post excerpt. The text is never summarized, rewritten, or shortened; the posts of a thread, joined in order, give back the excerpt exactly.
+- The thread always has at least two posts, and the text alone decides how many there are. If the excerpt fits in one post, the first post carries the whole excerpt and the second one carries the link. If it needs one continuation, the link goes in a third post. With three or more text posts, the link is added at the end of the last one. Breaks go, in order of preference, at the end of a paragraph, a line, a sentence, or any whitespace, and only when none fits, inside a word.
+- Length is counted the way X counts it: every URL weighs 23 characters and characters such as emoji or CJK weigh 2. Premium accounts use the 25,000 limit.
+- The post link (UTM-tagged, and shortened when Nano URLs is active) is added once, always in the last post. When it shares a post with text, its space is reserved inside the limit before that post is calculated.
+- Images use the same selection and order as the other formats (featured image first, then the gallery, duplicates removed). The first post carries a single image, the main one: the featured image or, if there is none, the first gallery image. It is used only there. The rest are spread evenly from the second post on, up to four per post, without repeating any; with fewer images than posts, the posts after the first get one each in order, and with no images the thread is published as text. No posts are added for images: anything beyond the thread's capacity (for example, more than nine images in a three-post thread) is left out. Each image is sent only inside its own post.
+- If the post has no excerpt, the send fails with a clear message; the post body is never used instead. If the excerpt needs more posts than the thread limit allows, it also fails with a message and nothing is published or cut.
+- As in every format, the excerpt is sent as plain text (HTML removed) and BunnyChase links written in it are UTM-tagged.
+- Social post, Card link, and the other platforms are not affected.
 
 ---
 

@@ -154,8 +154,8 @@ final class Mutation_Commons {
         $thread_payload = $meta['thread'] ?? null;
 
         if ('twitter' === $svc) {
-            // Include thread array only when explicitly provided for social_post.
-            if ($detected_post_style === 'social_post' && is_array($thread_payload) && ! empty($thread_payload)) {
+            // Include thread array only when explicitly provided for a thread-capable style.
+            if (in_array($detected_post_style, array('social_post', 'excerpt_thread'), true) && is_array($thread_payload) && ! empty($thread_payload)) {
                 $thread_lines = array();
                 foreach ($thread_payload as $elem) {
                     $text_json = wp_json_encode((string) ($elem['text'] ?? ''));

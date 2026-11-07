@@ -209,7 +209,7 @@ final class Platform_Registry {
 					'premium_account' => false,
 					'post_style'      => 'social_post',
 				),
-				'supported_post_styles'  => array('social_post', 'card_link'),
+				'supported_post_styles'  => array('social_post', 'card_link', 'excerpt_thread'),
 				'default_post_style'     => 'social_post',
 
 				// The unique source of platform constraint data.

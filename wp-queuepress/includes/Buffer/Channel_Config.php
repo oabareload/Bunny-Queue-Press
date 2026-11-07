@@ -391,6 +391,10 @@ final class Channel_Config {
 			$options['card_link']      = __('Card link', self::TEXT_DOMAIN);
 			$descriptions['card_link'] = __('Traffic-oriented publication. Uses the post excerpt as the body, the post URL as the link, the SEO title when available, and the post thumbnail. Never generates a thread.', self::TEXT_DOMAIN);
 		}
+		if (in_array('excerpt_thread', $styles, true)) {
+			$options['excerpt_thread']      = __('Excerpt thread', self::TEXT_DOMAIN);
+			$descriptions['excerpt_thread'] = __('Publishes the full post excerpt as a thread of at least two posts. The first post carries one image, the other images are spread from the second post on, and the post link goes at the end of the last post.', self::TEXT_DOMAIN);
+		}
 		return array(
 			'type'                => 'select',
 			'label'               => __('Post style', self::TEXT_DOMAIN),

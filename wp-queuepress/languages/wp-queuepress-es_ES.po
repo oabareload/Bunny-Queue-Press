@@ -279,3 +279,26 @@ msgstr "Usa la programación de WordPress para confirmar."
 
 msgid "Estimated first slot: "
 msgstr "Primer espacio estimado: "
+
+msgid "Excerpt thread"
+msgstr "Hilo de extracto"
+
+msgid "Publishes the full post excerpt as a thread of at least two posts. The first post carries one image, the other images are spread from the second post on, and the post link goes at the end of the last post."
+msgstr "Publica el extracto completo de la entrada como un hilo de al menos dos publicaciones. La primera lleva una imagen, las demás imágenes se reparten desde la segunda publicación y el enlace de la entrada va al final de la última."
+
+msgid "This post has no excerpt, so it cannot be published with the Excerpt thread format."
+msgstr "Esta entrada no tiene extracto, por lo que no se puede publicar con el formato Hilo de extracto."
+
+msgid "The character limit is too small to fit the post link."
+msgstr "El límite de caracteres es demasiado pequeño para incluir el enlace de la entrada."
+
+#. translators: 1: posts needed, 2: maximum thread posts
+#, php-format
+msgid "The excerpt needs %1$d posts but the thread limit is %2$d. Nothing was published."
+msgstr "El extracto necesita %1$d publicaciones, pero el límite del hilo es %2$d. No se ha publicado nada."
+
+msgid "Could not split the excerpt within the character limit."
+msgstr "No se pudo dividir el extracto respetando el límite de caracteres."
+
+msgid "Could not build the Excerpt thread."
+msgstr "No se pudo construir el Hilo de extracto."

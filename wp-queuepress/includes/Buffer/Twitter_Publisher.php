@@ -14,6 +14,16 @@
  *       caption = excerpt (no permalink, since the link asset carries the URL)
  *       assets  = [link asset] (or featured-only fallback)
  *
+ *   - post_style = 'excerpt_thread' →
+ *       thread  = full excerpt split on paragraph/sentence/word boundaries using
+ *                 X's weighted count. The post URL (UTM + Nano URLs) is appended
+ *                 only to the last element. The first element carries one image;
+ *                 the rest are spread evenly from the second element on, up to
+ *                 four per element, and no element is added just for images.
+ *       The thread always has at least two elements: an excerpt that fits in
+ *       the first gets the link in the second; with one continuation, the link
+ *       goes in a third; with three or more text elements it joins the last.
+ *
  * NSFW:
  *   Twitter does NOT restrict gallery images on NSFW (allow_gallery_on_nsfw=true).
  *
@@ -31,6 +41,16 @@ if (! defined('ABSPATH')) {
 }
 
 final class Twitter_Publisher {
+
+    /**
+     * Weight X gives to any URL, whatever its real length.
+     */
+    private const X_URL_WEIGHT = 23;
+
+    /**
+     * Separator between the excerpt text and the link in the last post.
+     */
+    private const X_LINK_SEPARATOR = "\n\n";
 
     private Buffer_Client $client;
     private Channel_Config $config;
@@ -119,6 +139,17 @@ final class Twitter_Publisher {
 
         if ($post_style_cfg === 'card_link') {
             $mutation = $this->build_card_link_mutation($post, $cfg, $channel_id, $limit, $share_mode);
+        } elseif ($post_style_cfg === 'excerpt_thread') {
+            $built = $this->build_excerpt_thread_mutation($post, $cfg, $channel_id, $limit, $service_limits, $share_mode);
+            if (! isset($built['mutation'])) {
+                return array(
+                    'success'    => false,
+                    'message'    => (string) ($built['message'] ?? __('Could not build the Excerpt thread.', 'wp-queuepress')),
+                    'service'    => 'twitter',
+                    'channel_id' => $channel_id,
+                );
+            }
+            $mutation = $built['mutation'];
         } else {
             $mutation = $this->build_social_post_mutation($post, $cfg, $channel_id, $limit, $is_nsfw, $service_limits, null, $share_mode);
         }
@@ -308,5 +339,246 @@ final class Twitter_Publisher {
         );
 
         return Mutation_Commons::build_create_post_mutation($channel_id, $intro, $top_assets, $meta, 'twitter', $share_mode);
+    }
+
+    /**
+     * Build an Excerpt Thread mutation: the full excerpt, split into a thread
+     * when it does not fit in one post, with the post link only at the end of
+     * the last post.
+     *
+     * Returns array('mutation' => string) on success or array('message' => string)
+     * when the post cannot be published in this format. Nothing is ever
+     * truncated or rewritten to make it fit.
+     *
+     * @return array{mutation?: string, message?: string}
+     */
+    private function build_excerpt_thread_mutation(WP_Post $post, array $cfg, string $channel_id, int $limit, array $service_limits, string $share_mode = 'addToQueue'): array {
+        $no_excerpt = array('message' => __('This post has no excerpt, so it cannot be published with the Excerpt thread format.', 'wp-queuepress'));
+
+        // build_caption() would fall back to the post body when the excerpt is
+        // empty; here that would thread the whole article, so stop first.
+        if ('' === trim(wp_strip_all_tags((string) $post->post_excerpt))) {
+            return $no_excerpt;
+        }
+
+        $excerpt = Publisher_Commons::build_caption(
+            $post,
+            $cfg,
+            PHP_INT_MAX,
+            array(
+                'force_source'      => 'excerpt',
+                'include_title'     => false,
+                'include_permalink' => false,
+                'platform'          => 'twitter',
+            )
+        );
+        if ('' === $excerpt) {
+            return $no_excerpt;
+        }
+
+        // UTM-tagged permalink, shortened through Nano URLs when available.
+        $link    = Publisher_Commons::short_post_url(Publisher_Commons::get_pretty_post_url($post), $post, 'twitter');
+        $reserve = self::x_weighted_length(self::X_LINK_SEPARATOR . $link);
+        if ($limit <= $reserve) {
+            return array('message' => __('The character limit is too small to fit the post link.', 'wp-queuepress'));
+        }
+
+        $max_posts       = max(2, (int) ($service_limits['max_thread_posts']['value'] ?? 25));
+        $max_per_element = max(1, (int) ($service_limits['max_images']['value'] ?? 4));
+
+        // The text alone decides how many posts there are (never the images). The
+        // split is lossless: the pieces concatenate back to the exact excerpt. The
+        // link goes only in the last post, and there are always at least two.
+        $suffix = self::X_LINK_SEPARATOR . $link;
+        if (self::x_weighted_length($excerpt) <= $limit) {
+            // The whole excerpt fits in the first post: the link goes in the second.
+            $tweets = array($excerpt, $link);
+        } else {
+            $tweets = self::x_split_text($excerpt, '', $limit);
+            if (2 === count($tweets)) {
+                // A single continuation: the link goes in a third post.
+                $tweets[] = $link;
+            } else {
+                // Three or more text posts: the link joins the last one, and its
+                // space is reserved before that post is calculated.
+                $tweets = self::x_split_text($excerpt, $suffix, $limit);
+            }
+        }
+        if (empty($tweets)) {
+            return array('message' => __('Could not split the excerpt within the character limit.', 'wp-queuepress'));
+        }
+
+        $count = count($tweets);
+        if ($count > $max_posts) {
+            return array('message' => sprintf(
+                /* translators: 1: posts needed, 2: maximum thread posts */
+                __('The excerpt needs %1$d posts but the thread limit is %2$d. Nothing was published.', 'wp-queuepress'),
+                $count,
+                $max_posts
+            ));
+        }
+
+        foreach ($tweets as $text) {
+            if (self::x_weighted_length($text) > $limit) {
+                return array('message' => __('Could not split the excerpt within the character limit.', 'wp-queuepress'));
+            }
+        }
+
+        // Images: same selection and order as the other formats (featured first,
+        // then gallery, deduplicated). The first post carries a single image (the
+        // main one, used once) and the rest are spread evenly from the second post
+        // on, up to the per-post maximum. No post is added just for images, so
+        // anything beyond the thread's capacity is left out.
+        $images = Publisher_Commons::build_assets($post, $cfg, Publisher_Commons::is_nsfw($post), 1 + $max_per_element * ($count - 1), true);
+        $main   = array_slice($images, 0, 1);
+        $rest   = array_slice($images, 1);
+
+        $distributed = array_merge(
+            array($main),
+            Publisher_Commons::distribute_images_across_chunks($rest, $count - 1, $max_per_element, false)
+        );
+
+        $thread_payload = array();
+        foreach ($tweets as $i => $text) {
+            $assets_for_element = array();
+            foreach ($distributed[$i] ?? array() as $url) {
+                $assets_for_element[] = array('image' => array('url' => $url));
+            }
+            $thread_payload[] = array('text' => $text, 'assets' => $assets_for_element);
+        }
+
+        // Every image goes inside its own thread element and nothing is sent as a
+        // top-level asset, so no image can be published twice.
+
+        return array('mutation' => Mutation_Commons::build_create_post_mutation(
+            $channel_id,
+            $tweets[0],
+            array(),
+            array('detected_post_style' => 'excerpt_thread', 'thread' => $thread_payload),
+            'twitter',
+            $share_mode
+        ));
+    }
+
+    /**
+     * Length of a text as X counts it: URLs (with scheme, or bare domains with
+     * a common TLD) weigh 23 each; characters outside X's weight-1 ranges
+     * (Latin, general punctuation) weigh 2, including emoji and CJK.
+     * Deliberately conservative: it may overcount, never undercount.
+     */
+    private static function x_weighted_length(string $text): int {
+        if ('' === $text) { return 0; }
+
+        $weight = 0;
+        $rest   = (string) preg_replace_callback(
+            '~https?://[^\s<>"]+|\b(?:[a-z0-9][a-z0-9-]*\.)+(?:com|net|org|io|co|es|info|app|dev|me|tv|ly|gg|xyz|online|site|blog|news|mx|ar|cl|jp|us|uk|de|fr)\b(?:/[^\s<>"]*)?~iu',
+            static function (array $m) use (&$weight): string {
+                $url   = $m[0];
+                $trail = '';
+                // Sentence punctuation glued to a URL is not part of it.
+                if (preg_match('~[.,;:!?)\]}\'"\x{2026}]+$~u', $url, $t)) {
+                    $trail = $t[0];
+                }
+                $weight += self::X_URL_WEIGHT;
+                return $trail;
+            },
+            $text
+        );
+
+        foreach (preg_split('//u', $rest, -1, PREG_SPLIT_NO_EMPTY) ?: array() as $ch) {
+            $cp = (int) mb_ord($ch, 'UTF-8');
+            $weight += ($cp <= 4351 || ($cp >= 8192 && $cp <= 8205) || ($cp >= 8208 && $cp <= 8223) || ($cp >= 8242 && $cp <= 8247)) ? 1 : 2;
+        }
+
+        return $weight;
+    }
+
+    /**
+     * Splits the excerpt into posts without losing a single character: the
+     * pieces, concatenated in order, give back $text exactly. The last post also
+     * carries $suffix (separator + link), whose space is reserved. Breaks go at
+     * the latest natural point that fits (paragraph, line, sentence end, any
+     * whitespace) and only when none exists, mid-word. Whitespace is never
+     * dropped or rewritten; it stays where it was in the text.
+     *
+     * @return string[] Empty array when the text cannot be split within $limit.
+     */
+    private static function x_split_text(string $text, string $suffix, int $limit): array {
+        $chunks  = array();
+        $reserve = self::x_weighted_length($suffix);
+
+        while (true) {
+            if (self::x_weighted_length($text . $suffix) <= $limit) {
+                $chunks[] = $text . $suffix;
+                return $chunks;
+            }
+
+            // If the rest fits but not together with the link, cut earlier so the
+            // last post keeps some text and the link.
+            $cut = self::x_weighted_length($text) <= $limit ? $limit - $reserve : $limit;
+            $at  = $cut > 0 ? self::x_find_break($text, $cut) : 0;
+            if ($at < 1 || $at >= mb_strlen($text)) {
+                return array();
+            }
+
+            $chunks[] = mb_substr($text, 0, $at);
+            $text     = mb_substr($text, $at);
+        }
+    }
+
+    /**
+     * Position (in characters) where to cut $text so the first part weighs at
+     * most $limit. Prefers, in order: end of a paragraph, end of a line, end of a
+     * sentence, any whitespace; otherwise the longest prefix that fits. The cut
+     * is always placed after the whitespace so no character is lost.
+     */
+    private static function x_find_break(string $text, int $limit): int {
+        $low  = 1;
+        $high = mb_strlen($text);
+        $max  = 0;
+        while ($low <= $high) {
+            $mid = intdiv($low + $high, 2);
+            if (self::x_weighted_length(mb_substr($text, 0, $mid)) <= $limit) {
+                $max = $mid;
+                $low = $mid + 1;
+            } else {
+                $high = $mid - 1;
+            }
+        }
+        if ($max < 1) { return 0; }
+
+        $chars = preg_split('//u', mb_substr($text, 0, $max), -1, PREG_SPLIT_NO_EMPTY) ?: array();
+
+        // The first post must contain something other than whitespace.
+        $lead = 0;
+        while ($lead < $max && 1 === preg_match('/^\s$/u', $chars[$lead])) { $lead++; }
+
+        $best = array();
+        for ($b = $max; $b > $lead; $b--) {
+            if (1 !== preg_match('/^\s$/u', $chars[$b - 1])) { continue; }
+
+            $j        = $b - 1;
+            $newlines = 0;
+            while ($j >= $lead && 1 === preg_match('/^\s$/u', $chars[$j])) {
+                if ("\n" === $chars[$j]) { $newlines++; }
+                $j--;
+            }
+
+            if ($newlines >= 2) {
+                $rank = 1;
+            } elseif (1 === $newlines) {
+                $rank = 2;
+            } elseif (1 === preg_match('/^[.!?\x{2026}]$/u', $chars[$j])) {
+                $rank = 3;
+            } else {
+                $rank = 4;
+            }
+            if (! isset($best[$rank])) { $best[$rank] = $b; }
+        }
+
+        if (empty($best)) { return $max; }
+        ksort($best);
+
+        return (int) reset($best);
     }
 }

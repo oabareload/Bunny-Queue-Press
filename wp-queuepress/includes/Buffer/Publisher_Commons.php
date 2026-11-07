@@ -906,13 +906,16 @@ final class Publisher_Commons {
      * - If images >= chunks: distribute as evenly as possible
      * - If images < chunks: assign one image per chunk cycling through images
      * - Cap images per chunk to $max_per_chunk
+     * - When $repeat_when_fewer is false and images < chunks: one image per chunk
+     *   for the first chunks only, with no image repeated (default keeps cycling).
      *
      * @param string[] $images
      * @param int $num_chunks
      * @param int $max_per_chunk
+     * @param bool $repeat_when_fewer
      * @return array<int,array<string>>
      */
-    public static function distribute_images_across_chunks(array $images, int $num_chunks, int $max_per_chunk): array {
+    public static function distribute_images_across_chunks(array $images, int $num_chunks, int $max_per_chunk, bool $repeat_when_fewer = true): array {
         $num_chunks = max(1, (int) $num_chunks);
         $max_per_chunk = max(1, (int) $max_per_chunk);
         $total = count($images);
@@ -929,6 +932,13 @@ final class Publisher_Commons {
                 for ($j = 0; $j < $count && $idx < $total; $j++, $idx++) {
                     $result[$i][] = $images[$idx];
                 }
+            }
+            return $result;
+        }
+
+        if (! $repeat_when_fewer) {
+            for ($i = 0; $i < $total; $i++) {
+                $result[$i][] = $images[$i];
             }
             return $result;
         }

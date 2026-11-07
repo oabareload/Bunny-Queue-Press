@@ -373,3 +373,26 @@ msgstr ""
 
 msgid "Estimated first slot: "
 msgstr ""
+
+msgid "Excerpt thread"
+msgstr ""
+
+msgid "Publishes the full post excerpt as a thread of at least two posts. The first post carries one image, the other images are spread from the second post on, and the post link goes at the end of the last post."
+msgstr ""
+
+msgid "This post has no excerpt, so it cannot be published with the Excerpt thread format."
+msgstr ""
+
+msgid "The character limit is too small to fit the post link."
+msgstr ""
+
+#. translators: 1: posts needed, 2: maximum thread posts
+#, php-format
+msgid "The excerpt needs %1$d posts but the thread limit is %2$d. Nothing was published."
+msgstr ""
+
+msgid "Could not split the excerpt within the character limit."
+msgstr ""
+
+msgid "Could not build the Excerpt thread."
+msgstr ""

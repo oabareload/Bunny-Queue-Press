@@ -1,5 +1,29 @@
 # Changelog
 
+### 2.7.10
+
+**Changed**
+- Excerpt thread now always publishes at least two posts. The first post carries the first part of the excerpt and a single image: the featured image or, if there is none, the first gallery image.
+- The text alone decides how many posts there are. An excerpt that fits in one post gets a second post with the link; with one continuation, the link goes in a third post; with three or more text posts, the link is added at the end of the last one.
+- The remaining images are spread evenly from the second post on, up to four per post and without repeats. Images beyond the thread's capacity are left out, and no posts are added just for images.
+- If the excerpt needs more posts than the thread limit allows, the send fails with a clear message and nothing is published.
+- Updated the Spanish translations of the format.
+
+**Unchanged**
+- Social post and Card link on X, and every other platform, behave exactly as before.
+
+### 2.7.9
+
+**Added**
+- Added the Excerpt thread post style for X. It publishes the full post excerpt as a single post or, when it exceeds the character limit, as a connected thread, without summarizing, rewriting, or removing any of the text.
+- The post link, UTM-tagged and shortened with Nano URLs when active, is added only at the end of the last post, inside its character limit.
+- Images are spread across the thread in the usual order, up to four per post and without repeats. Each image is sent once, inside its own post.
+- If the post has no excerpt, or the excerpt cannot fit within the thread limit, the send fails with a clear message instead of publishing partial text.
+- Added Spanish translations for the new format.
+
+**Unchanged**
+- Social post and Card link on X, and every other platform, behave exactly as before.
+
 ### 2.7.8
 
 **Added**
