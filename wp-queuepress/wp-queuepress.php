@@ -8,7 +8,8 @@
  * Requires PHP: 7.4
  * Author: BunnyChase
  * Author URI: https://bunnychase.net/
- * License: GPL-2.0-or-later
+ * License: GPL-2.0-only
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: wp-queuepress
  * Domain Path: /languages
  *

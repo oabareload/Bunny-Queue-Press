@@ -4,6 +4,12 @@ Bunny Queue Press is a lightweight editorial scheduling plugin for WordPress. Ve
 
 ## Plugin metadata
 
+- **Plugin Name:** Bunny Queue Press
+- **Plugin URI:** https://bunnychase.net/bunny-queue-press/
+- **Author:** BunnyChase
+- **Author URI / Sitio oficial:** https://bunnychase.net/
+- **License:** GNU General Public License v2.0 (GPL-2.0-only)
+
 ## Installation
 
 1. Copy the `wp-queuepress` folder into `wp-content/plugins/`.
